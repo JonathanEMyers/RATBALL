@@ -13,6 +13,7 @@ CHANNELS = 1
 RATE = 44100
 CHUNK_SIZE = 882
 numSeconds = 10
+metadataSize = 26
 
 # Setting Buffer Parameters
 bufferSize = numSeconds * 50
@@ -21,6 +22,7 @@ audioMetaBufferOne = collections.deque(maxlen=bufferSize)
 audioBufferTwo = collections.deque(maxlen=bufferSize)
 audioMetaBufferTwo = collections.deque(maxlen=bufferSize)
 whichBuffer = True             # True for bufferOne, False for bufferTwo
+stopProgram = False
 
 # Set Speaker Parameters
 periodLength = .5 # Seconds
@@ -46,17 +48,23 @@ speaker.setperiodsize(periodSize);
 HOST = '127.0.0.1'
 PORT = 36783
 
-# Creating Server
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_socket.bind((HOST, PORT))
-server_socket.listen()
-print(f"Listening on {HOST}:{PORT}...")
-
-conn, addr = server_socket.accept()
-print(f"Connected by {addr}")
+# Connecting to Server
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect((HOST, PORT));
+print("Connected!");
 
 
 # Defining Functions
+
+# This is a function to make sure the entire data is recieved
+def recv_all(sock, size):
+    data = b""
+    while len(data) < size:
+        packet = sock.recv(size - len(data))
+        if not packet:
+            return None  # Handle closed connection
+        data += packet
+    return data
 
 
 # This is a function to generate a waveform to be played over the speaker.
@@ -94,21 +102,25 @@ def generateWaveform(frequency):
 # is filled.
 def recordAudio():
     global whichBuffer
-
+    global stopProgram
 
     while True:
+
+        if(stopProgram == True):
+            break
+
         # Getting data from microphone
         length, data = micInput.read()
 
         if length:
             # Print statements for chatter
-            print("Length of audio buffer one:")
-            print(len(audioBufferOne))
-            print(len(audioMetaBufferOne))
-            print("Length of audio buffer two")
-            print(len(audioBufferTwo))
-            print(len(audioMetaBufferTwo))
-            print("\n")
+            # print("Length of audio buffer one:")
+            # print(len(audioBufferOne))
+            # print(len(audioMetaBufferOne))
+            # print("Length of audio buffer two")
+            # print(len(audioBufferTwo))
+            # print(len(audioMetaBufferTwo))
+            # print("\n")
 
             # Appending audio data to associated list depending on the value of whichBuffer
             if(whichBuffer == True):
@@ -150,6 +162,8 @@ def recordAudio():
 # that all data has been sent, it will toggle the bufferXFull variables.
 def sendAudio():
     global whichBuffer
+    global stopProgram
+    doneStopping = False
 
     # For future me: I am trying to send a packet of info that contains the datetime
     # stamp for a buffer unload, as well as the length of the buffer so that the receiver
@@ -164,6 +178,51 @@ def sendAudio():
     # knows when the buffer is empty and can accept a new metadata packet.
 
     while True:
+
+        if(stopProgram == True):
+
+            while(not doneStopping):
+
+                if(len(audioBufferOne) > 0):
+                    data = audioBufferOne.popleft()
+                    metadata = audioMetaBufferOne.popleft()
+                    totalPacket = metadata + data
+                    print("BufferOne still full!")
+
+
+                elif(len(audioBufferTwo) > 0):
+                    data = audioBufferTwo.popleft()
+                    metadata = audioMetaBufferTwo.popleft()
+                    totalPacket = metadata + data
+                    print("BufferTwo still full!")
+
+                if data:
+                    print("Got data!")
+                    try:
+                        s.sendall(totalPacket)
+                        # print("Packet sent!")
+                    except Exception as e:
+                        # print(f"Error in sendAudio(): {e}")
+                        break
+
+                    data = None
+
+                else:
+                    print("No data left, sending stopping transmission!")
+                    try:
+                        totalPacket = b"STOP_TRANSMISSION" + bytearray(metadataSize + CHUNK_SIZE - 17)
+                        s.sendall(totalPacket)
+                        s.close()
+                        print("Sent stopping transmission flag!")
+                        doneStopping = True
+                        break
+                    except Exception as e:
+                        print(f"Error in sendAudio(): {e}")
+                        break
+
+
+            
+            
 
         # Getting audio data and metadata from buffer one
         if(not whichBuffer and len(audioBufferOne) > 0):
@@ -194,12 +253,31 @@ def sendAudio():
         # Sending data over TCP
         if data:
             try:
-                conn.sendall(totalPacket)
+                s.sendall(totalPacket)
+                # print("Packet sent!")
             except Exception as e:
                 print(f"Error in sendAudio(): {e}")
                 break
         else:
             time.sleep(0.001)
+        
+
+
+def recieveStop():
+    global stopProgram
+
+    print("Stopping thread is executing.")
+
+    stopMessage = recv_all(s, 4)
+
+    if stopMessage:
+        print("STOPPING PROGRAM!")
+        stopProgram = True
+    else:
+        print("Error: Did not receive stop message.")
+    
+
+
 
 # def recieveFrequency():
 #     while True:
@@ -213,12 +291,14 @@ def sendAudio():
 
 
 # Start threads only if we have a connection
-print("Started Server!")
 recordingThread = threading.Thread(target=recordAudio, daemon=True)
 recordingThread.start()
 
 sendingThread = threading.Thread(target=sendAudio, daemon=True)
 sendingThread.start()
+
+stoppingThread = threading.Thread(target=recieveStop, daemon=True)
+stoppingThread.start()
 
 # receiveFrequencyThread = threading.Thread(target = recieveFrequency, daemon=True)
 # receiveFrequencyThread.start()
@@ -229,5 +309,4 @@ try:
         time.sleep(1)
 except KeyboardInterrupt:
     print("Stopping!")
-    conn.close()
-    server_socket.close()
+    s.close()
