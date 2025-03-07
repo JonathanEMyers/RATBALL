@@ -9,11 +9,15 @@ PORT = 36783
 # Connecting to Server
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((HOST, PORT));
-print("Connected!");
+print("In programStopClient -- Connected!");
 
+# Defining stop message
+beginStopMessage = b'BEGIN_STOP'
 
-time.sleep(10)
+# Waiting 10 seconds to simulate a short experiment
+time.sleep(300)
 
-s.sendall(bytearray(4))
-print("Sent stopping message!")
+# Transmitting stop flag
+s.sendall(beginStopMessage)
+print("In programStopClient -- Sent beginStop trigger!")
 s.close()

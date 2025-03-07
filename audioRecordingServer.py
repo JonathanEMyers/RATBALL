@@ -16,26 +16,28 @@ metadataSize = 26;
 # Defining Frequency Stream Parameters
 frequency = 200.0;
 
-# Program Counter to Stop Program After X Seconds
-stopCounter = 0;
-stopProgram = False;
+# Flags to begin and end stopping program
+beginStop = False;
+endStop = False;
 
 # Creating Server
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_socket.bind((HOST, PORT))
-server_socket.listen()
-print(f"Listening on {HOST}:{PORT}...")
+serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+serverSocket.bind((HOST, PORT))
+serverSocket.listen()
+print(f"In audioRecordingServer -- Listening on {HOST}:{PORT}...")
 
-conn, addr = server_socket.accept()
-print(f"Connected by {addr}")
+# Accepting connection to audio recording client
+conn, addr = serverSocket.accept()
+print(f"In audioRecordingServer -- Connected by {addr}")
 
-conn2, addr2 = server_socket.accept()
-print(f"Connected by {addr2}")
+# Accepting connection to stop program client
+conn2, addr2 = serverSocket.accept()
+print(f"In audioRecordingServer -- Connected by {addr2}")
 
 # Was encountering some issues where recv was running too fast,
 # and the metadata could not be decoded, so this is here to ensure
 # that all data is recieved before attempting to encode
-def recv_all(sock, size):
+def recvAll(sock, size):
     data = b""
     while len(data) < size:
         packet = sock.recv(size - len(data))
@@ -46,68 +48,60 @@ def recv_all(sock, size):
 
 
 def audioClient():
+    global endStop
+
     # Opening audio storage file
     with open("audioOne.raw", "wb") as fAudio:
+
         # Opening metadata storage file
         with open("audioOne.txt", "w") as fMeta:
-            print("Opened file!")
+            print("In audioRecordingServer.audioClient() -- Opened files!")
 
             # Attempting to recieve TCP packets from jetson
-            try:
-                while True:
+            while(not endStop):
 
-                    # Recieving entire packet
-                    totalPacket = recv_all(conn, metadataSize + chunkSize)
-                    if totalPacket is None:
-                        print("Connection closed")
-                        break
+                # Recieving entire packet
+                totalPacket = recvAll(conn, metadataSize + chunkSize)
 
-                    if totalPacket.startswith(b"STOP_TRANSMISSION"):
-                        print("Recieved stopping transmission request!s")
-                        conn.close()
-                        conn2.close()
-                        server_socket.close()
-                        fAudio.close()
-                        fMeta.close()
-                        break
-                    
-                    # print(len(totalPacket))
+                # Packet not recieved
+                if(totalPacket is None):
+                    pass
+                    # print("Connection closed")
 
+                # Transmission includes program stop program flag from Jetson
+                elif(totalPacket[:8] == b'END_STOP'):
+                    print("In audioRecordingServer.audioClient() -- Recieved endStop trigger!")
+                    endStop = True
+
+                # Transmission is normal data
+                else:
+                    # Splitting packet into metadata and data
                     metadata = totalPacket[:26].decode("utf-8")
                     data = totalPacket[26:]
 
+                    # Writing data into files
                     fAudio.write(data)
                     fMeta.write(metadata + "\n")
+    
+    # Program has stopped, so it is safe to close all openings
+    conn.close()
+    conn2.close()
+    serverSocket.close()
+    fAudio.close()
+    fMeta.close()
 
-                # print("Recieved and written!")
-                    
-                    # Legacy code from sending frequencies
-                    # if(frequency < 500):
-                    #     frequency = frequency + 1.0;
-                    # else:
-                    #     frequency = 200.0;
-
-                    # s.sendall(struct.pack('!f', frequency));
-
-            except KeyboardInterrupt:
-                print("Stopping");
-            finally:
-                conn.close()
-                conn2.close()
-                server_socket.close()
-                fAudio.close()
-                fMeta.close()
-
-
+# Because sendall() does not communicate from client to client, this forwards
+# the stop flag transmission incoming from the BMI to the Jetson.
 def stoppingClient():
     while True:
         try:
-            stop_signal = conn2.recv(4)
-            if stop_signal:
-                print("Stop signal received! Forwarding to audio client...")
-                conn.sendall(stop_signal)  # Send stop signal to recording client
-                break  # Stop listening after sending
+            stopSignal = conn2.recv(10)
+            if stopSignal:
+                print("In audioRecordingServer.stoppingClient() -- Stop signal received! Forwarding to audio client...")
+                conn.sendall(stopSignal)
+                break
         except:
+            print("Error in audioRecordingServer.stoppingClient() -- Unable to send forward stop program flag!")
             break
 
 # Start threads to handle each client
@@ -117,10 +111,6 @@ stopThread = threading.Thread(target=stoppingClient, daemon=True)
 audioThread.start()
 stopThread.start()
 
-# Keep server alive
-try:
-    while True:
-        pass
-except KeyboardInterrupt:
-    print("Shutting down server.")
-    server_socket.close()
+# Refer to audioRecordingClient to see why I do this.
+stopThread.join()
+audioThread.join()

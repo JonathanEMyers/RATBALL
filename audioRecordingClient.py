@@ -22,7 +22,7 @@ audioMetaBufferOne = collections.deque(maxlen=bufferSize)
 audioBufferTwo = collections.deque(maxlen=bufferSize)
 audioMetaBufferTwo = collections.deque(maxlen=bufferSize)
 whichBuffer = True             # True for bufferOne, False for bufferTwo
-stopProgram = False
+beginStop = False
 
 # Set Speaker Parameters
 periodLength = .5 # Seconds
@@ -31,18 +31,22 @@ periodSize = 1024
 t = np.linspace(0, periodLength, RATE)
 
 # Open PCM Device for Microphone
-micInput = aa.PCM(type=aa.PCM_CAPTURE, mode=aa.PCM_NORMAL)
-micInput.setchannels(CHANNELS)
-micInput.setrate(RATE)
-micInput.setformat(FORMAT)
-micInput.setperiodsize(CHUNK_SIZE)
+micInput = aa.PCM(type=aa.PCM_CAPTURE, 
+                  mode=aa.PCM_NORMAL, 
+                  channels=CHANNELS, 
+                  rate=RATE, 
+                  format=FORMAT, 
+                  periodsize=CHUNK_SIZE)
+
 
 # Open PCM Device for Speaker
-speaker = aa.PCM(type=aa.PCM_PLAYBACK, mode=aa.PCM_NORMAL);
-speaker.setchannels(CHANNELS);
-speaker.setrate(RATE);
-speaker.setformat(FORMAT);
-speaker.setperiodsize(periodSize);
+speaker = aa.PCM(type=aa.PCM_PLAYBACK, 
+                 mode=aa.PCM_NORMAL, 
+                 channels=CHANNELS, 
+                 rate=RATE, 
+                 format=FORMAT, 
+                 periodsize=periodSize)
+
 
 # Defining Server Parameters
 HOST = '127.0.0.1'
@@ -51,13 +55,13 @@ PORT = 36783
 # Connecting to Server
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((HOST, PORT));
-print("Connected!");
+print("In audioRecordingClient -- Connected!");
 
 
 # Defining Functions
 
 # This is a function to make sure the entire data is recieved
-def recv_all(sock, size):
+def recvAll(sock, size):
     data = b""
     while len(data) < size:
         packet = sock.recv(size - len(data))
@@ -102,18 +106,17 @@ def generateWaveform(frequency):
 # is filled.
 def recordAudio():
     global whichBuffer
-    global stopProgram
+    global beginStop
 
-    while True:
-
-        if(stopProgram == True):
-            break
+    while(True and not beginStop):
+        # print("In audioRecordingClient.recordAudio() -- Entered recordAudio while loop!")
 
         # Getting data from microphone
         length, data = micInput.read()
 
         if length:
             # Print statements for chatter
+            # print("In audioRecordingClient.recordAudio() -- Got audio data!")
             # print("Length of audio buffer one:")
             # print(len(audioBufferOne))
             # print(len(audioMetaBufferOne))
@@ -122,8 +125,9 @@ def recordAudio():
             # print(len(audioMetaBufferTwo))
             # print("\n")
 
-            # Appending audio data to associated list depending on the value of whichBuffer
+            # whichBuffer being true means stack up bufferOne and transmit from bufferTwo
             if(whichBuffer == True):
+
                 # Appending audio data and metadata to associated lists
                 audioBufferOne.append(data)
                 now = datetime.now()
@@ -132,8 +136,11 @@ def recordAudio():
 
                 # Switching flag to indicate bufferOne is full
                 if(len(audioBufferOne) >= bufferSize):
+                    # print("Size of bufferOne at full:")
+                    # print(len(audioBufferOne))
                     whichBuffer = False
 
+            # whichBuffer being false means stack up bufferTwo and transmit from bufferOne
             elif(whichBuffer == False):
 
                 # Appending audio data and metadata to associated lists
@@ -145,9 +152,11 @@ def recordAudio():
                 # Switching flag to indicate bufferTwo is full
                 if(len(audioBufferTwo) >= bufferSize):
                     whichBuffer = True
+                    # print("Size of bufferTwo at full:")
+                    # print(len(audioBufferTwo))
 
             else:
-                print("In recordAudio() -- Unsupported flag value!")
+                print("In audioRecordingClient.recordAudio() -- Unsupported flag value!")
             
 
 
@@ -162,8 +171,8 @@ def recordAudio():
 # that all data has been sent, it will toggle the bufferXFull variables.
 def sendAudio():
     global whichBuffer
-    global stopProgram
-    doneStopping = False
+    global beginStop
+    endStop = False
 
     # For future me: I am trying to send a packet of info that contains the datetime
     # stamp for a buffer unload, as well as the length of the buffer so that the receiver
@@ -177,55 +186,58 @@ def sendAudio():
     # Implement a for loop in the reciever code to iterate however large buffer is so that it
     # knows when the buffer is empty and can accept a new metadata packet.
 
-    while True:
+    while(not endStop):
+        # print("In audioRecordingClient.sendAudio(): Entered sendAudio while loop!")
 
-        if(stopProgram == True):
+        # Handling condition if program was told to stop via transmission from BMI (forwarded from Ingestor)
+        if(beginStop == True):
+            # print("audioRecordingClient.py -- Entered beginStop if statement!")
 
-            while(not doneStopping):
+            # endStop flag becomes true once all data is saved from buffers (to prevent data loss on shutdown)
+            while(not endStop):
 
+                # Take all information out of bufferOne first
                 if(len(audioBufferOne) > 0):
                     data = audioBufferOne.popleft()
                     metadata = audioMetaBufferOne.popleft()
                     totalPacket = metadata + data
-                    print("BufferOne still full!")
+                    # print("BufferOne still full!")
 
-
+                # Then take all information out of bufferTwo
                 elif(len(audioBufferTwo) > 0):
                     data = audioBufferTwo.popleft()
                     metadata = audioMetaBufferTwo.popleft()
                     totalPacket = metadata + data
-                    print("BufferTwo still full!")
+                    # print("BufferTwo still full!")
 
+                # If data gathering from buffers was successful
                 if data:
-                    print("Got data!")
+                    # print("Got data!")
                     try:
                         s.sendall(totalPacket)
                         # print("Packet sent!")
                     except Exception as e:
-                        # print(f"Error in sendAudio(): {e}")
-                        break
+                        print(f"Error in audioRecordingClient.sendAudio(): {e}")
 
+                    # Setting data back to null so it doesn't send the same data infinitely                            
                     data = None
 
+                # No more data in buffers, so it is safe to send transmission finished message to Ingestor
                 else:
-                    print("No data left, sending stopping transmission!")
+                    print("In audioRecordingClient.sendAudio() -- No data left, sending endStop trigger!")
                     try:
-                        totalPacket = b"STOP_TRANSMISSION" + bytearray(metadataSize + CHUNK_SIZE - 17)
+                        totalPacket = b'END_STOP' + bytearray(2*(metadataSize + CHUNK_SIZE) - len(b"END_STOP"))
                         s.sendall(totalPacket)
-                        s.close()
-                        print("Sent stopping transmission flag!")
-                        doneStopping = True
-                        break
+                        print("In audioRecordingClient.sendAudio() -- Sent endStop trigger!")
+                        endStop = True
+
                     except Exception as e:
-                        print(f"Error in sendAudio(): {e}")
-                        break
-
-
+                        print(f"In audioRecordingClient.sendAudio() -- Error in sendAudio(): {e}")
             
             
 
         # Getting audio data and metadata from buffer one
-        if(not whichBuffer and len(audioBufferOne) > 0):
+        elif(not whichBuffer and len(audioBufferOne) > 0):
             data = audioBufferOne.popleft()
             metadata = audioMetaBufferOne.popleft()
             totalPacket = metadata + data
@@ -243,12 +255,9 @@ def sendAudio():
             # print(len(totalPacket))
 
         # Buffer indicated by whichBuffer is empty, will probably occur at the start of a program run
-        elif(not whichBuffer and len(audioBufferOne) <= 0):
-            data = None
-        elif(whichBuffer and len(audioBufferTwo) <= 0):
-            data = None
         else:
             data = None
+            # print("In audioRecordingClient.sendAudio() -- Audio buffers are empty, probably just started program!")
 
         # Sending data over TCP
         if data:
@@ -256,25 +265,28 @@ def sendAudio():
                 s.sendall(totalPacket)
                 # print("Packet sent!")
             except Exception as e:
-                print(f"Error in sendAudio(): {e}")
+                print(f"In audioRecordingClient.sendAudio() -- {e}")
                 break
-        else:
-            time.sleep(0.001)
+    
+    # Closing all connections and such to stop program
+    print("In audioRecordingClient.sendAudio() -- Program has successfully concluded!")
+    time.sleep(2)
+    s.close()
         
 
 
 def recieveStop():
-    global stopProgram
+    global beginStop
 
-    print("Stopping thread is executing.")
+    print("In audioRecordingClient.recieveStop() -- Stopping thread is executing.")
 
-    stopMessage = recv_all(s, 4)
+    stopMessage = recvAll(s, 10)
 
-    if stopMessage:
-        print("STOPPING PROGRAM!")
-        stopProgram = True
+    if(stopMessage.startswith(b'BEGIN_STOP')):
+        print("In audioRecordingClient.recieveStop() -- Received beginStop trigger!")
+        beginStop = True
     else:
-        print("Error: Did not receive stop message.")
+        print("In audioRecordingClient.recieveStop() -- Error: Did not receive beginStop trigger.")
     
 
 
@@ -300,13 +312,12 @@ sendingThread.start()
 stoppingThread = threading.Thread(target=recieveStop, daemon=True)
 stoppingThread.start()
 
+# The join function waits to close the main thread until the thread that the join
+# function is being called on finishes. I was encountering issues with the main thread
+# doing this and it was throwing errors.
+stoppingThread.join()
+recordingThread.join()
+sendingThread.join()
+
 # receiveFrequencyThread = threading.Thread(target = recieveFrequency, daemon=True)
 # receiveFrequencyThread.start()
-
-try:
-    while True:
-        # print("Sleeping")
-        time.sleep(1)
-except KeyboardInterrupt:
-    print("Stopping!")
-    s.close()
