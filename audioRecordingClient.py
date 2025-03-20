@@ -4,7 +4,7 @@ import socket
 import time
 import collections
 import numpy as np
-import time
+import struct
 from datetime import datetime
 
 # Set capture parameters
@@ -13,7 +13,8 @@ CHANNELS = 1
 RATE = 44100
 CHUNK_SIZE = 882
 numSeconds = 10
-metadataSize = 26
+metadataSize = 26 + 26 + 4     # 26 for both timestamps and 4 for the frameCount integer
+frameCounter = 1
 
 # Setting Buffer Parameters
 bufferSize = numSeconds * 50
@@ -38,7 +39,6 @@ micInput = aa.PCM(type=aa.PCM_CAPTURE,
                   format=FORMAT, 
                   periodsize=CHUNK_SIZE)
 
-
 # Open PCM Device for Speaker
 speaker = aa.PCM(type=aa.PCM_PLAYBACK, 
                  mode=aa.PCM_NORMAL, 
@@ -49,16 +49,39 @@ speaker = aa.PCM(type=aa.PCM_PLAYBACK,
 
 
 # Defining Server Parameters
-HOST = '127.0.0.1'
-PORT = 36783
+ingestHostIP = '127.0.0.1'
+ingestListenerPort = 36783
+ingestPort = 36784
 
 # Connecting to Server
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect((HOST, PORT));
-print("In audioRecordingClient -- Connected!");
+ingestSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+ingestSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
+ingestSocket.bind(('127.0.0.1', ingestPort))
+ingestSocket.connect((ingestHostIP, ingestListenerPort))
+print("In audioRecordingClient -- Connected to ingestor!")
+
+# Defining Client-to-Client Parameters
+jetsonHostIP = '127.0.0.1'  # IP Address of Jetson -- Jetson is hosting this connection
+jetsonListenerPort = 36786    # Listener port for jetson server
+
+# Establishing Peer-to-Peer Server
+BMISocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)   # Socket for jetson-bmi connection, named as such
+BMISocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+BMISocket.bind((jetsonHostIP, jetsonListenerPort))
+BMISocket.listen(1)
+
+BMIConn, BMIAddr = BMISocket.accept()
+print(f"In audioRecordingClient -- Connected to BMI through {BMIAddr}")
 
 
-# Defining Functions
+
+
+
+
+
+                ## Defining Functions ##
+
+
 
 # This is a function to make sure the entire data is recieved
 def recvAll(sock, size):
@@ -69,6 +92,12 @@ def recvAll(sock, size):
             return None  # Handle closed connection
         data += packet
     return data
+
+
+
+
+
+
 
 
 # This is a function to generate a waveform to be played over the speaker.
@@ -86,6 +115,12 @@ def generateWaveform(frequency):
         audioData = -1
     
     return(audioData)
+
+
+
+
+
+
 
 
 # recordAudio() is a function to input audio from an ALSAaudio device
@@ -108,7 +143,7 @@ def recordAudio():
     global whichBuffer
     global beginStop
 
-    while(True and not beginStop):
+    while(not beginStop):
         # print("In audioRecordingClient.recordAudio() -- Entered recordAudio while loop!")
 
         # Getting data from microphone
@@ -160,6 +195,11 @@ def recordAudio():
             
 
 
+
+
+
+
+
 # sendAudio() is a function to take audio from one of the two buffer discussed
 # in recordAudio(), and send them over the network.
 #
@@ -172,6 +212,7 @@ def recordAudio():
 def sendAudio():
     global whichBuffer
     global beginStop
+    global frameCounter
     endStop = False
 
     # For future me: I am trying to send a packet of info that contains the datetime
@@ -200,21 +241,29 @@ def sendAudio():
                 if(len(audioBufferOne) > 0):
                     data = audioBufferOne.popleft()
                     metadata = audioMetaBufferOne.popleft()
-                    totalPacket = metadata + data
+                    now = datetime.now()
+                    timestamp = now.strftime("%Y-%m-%d %H:%M:%S.%f").encode("utf-8")
+                    frameCountPacked = struct.pack(">I", frameCounter)
+                    totalPacket = metadata + timestamp + frameCountPacked + data
+                    frameCounter = frameCounter + 1
                     # print("BufferOne still full!")
 
                 # Then take all information out of bufferTwo
                 elif(len(audioBufferTwo) > 0):
                     data = audioBufferTwo.popleft()
                     metadata = audioMetaBufferTwo.popleft()
-                    totalPacket = metadata + data
+                    now = datetime.now()
+                    timestamp = now.strftime("%Y-%m-%d %H:%M:%S.%f").encode("utf-8")
+                    frameCountPacked = struct.pack(">I", frameCounter)
+                    totalPacket = metadata + timestamp + frameCountPacked + data
+                    frameCounter = frameCounter + 1
                     # print("BufferTwo still full!")
 
                 # If data gathering from buffers was successful
                 if data:
                     # print("Got data!")
                     try:
-                        s.sendall(totalPacket)
+                        ingestSocket.sendall(totalPacket)
                         # print("Packet sent!")
                     except Exception as e:
                         print(f"Error in audioRecordingClient.sendAudio(): {e}")
@@ -226,8 +275,8 @@ def sendAudio():
                 else:
                     print("In audioRecordingClient.sendAudio() -- No data left, sending endStop trigger!")
                     try:
-                        totalPacket = b'END_STOP' + bytearray(2*(metadataSize + CHUNK_SIZE) - len(b"END_STOP"))
-                        s.sendall(totalPacket)
+                        totalPacket = b'END_STOP' + bytearray(metadataSize + (2 * CHUNK_SIZE) - len(b"END_STOP"))
+                        ingestSocket.sendall(totalPacket)
                         print("In audioRecordingClient.sendAudio() -- Sent endStop trigger!")
                         endStop = True
 
@@ -240,7 +289,11 @@ def sendAudio():
         elif(not whichBuffer and len(audioBufferOne) > 0):
             data = audioBufferOne.popleft()
             metadata = audioMetaBufferOne.popleft()
-            totalPacket = metadata + data
+            now = datetime.now()
+            timestamp = now.strftime("%Y-%m-%d %H:%M:%S.%f").encode("utf-8")
+            frameCountPacked = struct.pack(">I", frameCounter)
+            totalPacket = metadata + timestamp + frameCountPacked + data
+            frameCounter = frameCounter + 1
             # print(len(data))
             # print(len(metadata))
             # print(len(totalPacket))
@@ -249,7 +302,11 @@ def sendAudio():
         elif(whichBuffer and len(audioBufferTwo) > 0):
             data = audioBufferTwo.popleft()
             metadata = audioMetaBufferTwo.popleft()
-            totalPacket = metadata + data
+            now = datetime.now()
+            timestamp = now.strftime("%Y-%m-%d %H:%M:%S.%f").encode("utf-8")
+            frameCountPacked = struct.pack(">I", frameCounter)
+            totalPacket = metadata + timestamp + frameCountPacked + data
+            frameCounter = frameCounter + 1
             # print(len(data))
             # print(len(metadata))
             # print(len(totalPacket))
@@ -262,7 +319,7 @@ def sendAudio():
         # Sending data over TCP
         if data:
             try:
-                s.sendall(totalPacket)
+                ingestSocket.sendall(totalPacket)
                 # print("Packet sent!")
             except Exception as e:
                 print(f"In audioRecordingClient.sendAudio() -- {e}")
@@ -271,8 +328,15 @@ def sendAudio():
     # Closing all connections and such to stop program
     print("In audioRecordingClient.sendAudio() -- Program has successfully concluded!")
     time.sleep(2)
-    s.close()
+    ingestSocket.close()
+    BMISocket.close()
+    BMIConn.close()
         
+
+
+
+
+
 
 
 def recieveStop():
@@ -280,7 +344,7 @@ def recieveStop():
 
     print("In audioRecordingClient.recieveStop() -- Stopping thread is executing.")
 
-    stopMessage = recvAll(s, 10)
+    stopMessage = recvAll(BMIConn, 10)
 
     if(stopMessage.startswith(b'BEGIN_STOP')):
         print("In audioRecordingClient.recieveStop() -- Received beginStop trigger!")
@@ -288,6 +352,11 @@ def recieveStop():
     else:
         print("In audioRecordingClient.recieveStop() -- Error: Did not receive beginStop trigger.")
     
+
+
+
+
+
 
 
 
@@ -300,6 +369,16 @@ def recieveStop():
 #         audioData = generateWaveform(frequency)
 
 #         speaker.write(audioData)
+
+
+
+
+
+
+
+
+
+
 
 
 # Start threads only if we have a connection

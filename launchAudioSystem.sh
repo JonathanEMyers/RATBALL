@@ -27,10 +27,10 @@ sleep 5
 
 # # # Stop the audio client gracefully
 # echo "In launchAudioSystem -- Stopping audio client..."
-# kill $AUDIO_PID
+kill $AUDIO_PID
 
 # # # Stop the server
 # echo "In launchAudioSystem -- Stopping server..."
-# kill $SERVER_PID
+kill $SERVER_PID
 
 echo "In launchAudioSystem -- All processes stopped."
