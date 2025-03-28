@@ -1,36 +1,48 @@
 #!/bin/bash
 
 # Set the path to your virtual environment
-VENV_PATH="~/RBProjects/experimentation/25_02_11_NetworkingWithPython"
+VENV_PATH="/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/audio"
+source "$VENV_PATH/bin/activate"
+pip install -r './requirements.txt'
 
 # Start the server in the background
-echo "In launchAudioSystem -- Starting server..."
-python3 audioRecordingServer.py &
-SERVER_PID=$!
+printf '%s\n\n' "Starting server..."
+python3 ./ingestorCode.py &
+SERVER_PID="$!"
 sleep 2  # Wait for server to initialize
 
-# Start the audio recording client in the background
-echo "In launchAudioSystem -- Starting audio recording client..."
-python3 audioRecordingClient.py &
-AUDIO_PID=$!
+# Start the sensor data client in the background
+printf '%s\n\n' "Starting sensor data client..."
+python3 ./jetsonCode.py &
+SENSOR_PID="$!"
 sleep 2  # Wait for client to connect
 
 # Start the stopping client (after some delay)
-echo "In launchAudioSystem -- Starting stop client..."
-python3 programStopClient.py &
-STOP_PID=$!
+printf '%s\n\n' "Triggering client shutdown..."
+python3 BMICode.py &
+STOP_PID="$!"
 
-# # Wait for stop client to finish
+# Wait for stop client to finish
 wait $STOP_PID
 
 sleep 5
 
-# # # Stop the audio client gracefully
-# echo "In launchAudioSystem -- Stopping audio client..."
-kill $AUDIO_PID
+# Stop the sensor client gracefully
+printf '%s\n\n' "Stopping sensor client..."
+if ps -p "$SENSOR_PID" > /dev/null
+then
+    kill $SENSOR_PID
+else
+    printf '%s\n\n' 'Audio client already stopped!'
+fi
 
-# # # Stop the server
-# echo "In launchAudioSystem -- Stopping server..."
-kill $SERVER_PID
+# Stop the server
+printf '%s\n\n' "Stopping server..."
+if ps -p "$SERVER_PID" > /dev/null
+then
+    kill $SERVER_PID
+else
+    printf '%s\n\n' 'Audio server already stopped!'
+fi
 
-echo "In launchAudioSystem -- All processes stopped."
+printf '%s\n\n' "All processes stopped."
