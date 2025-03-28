@@ -3,17 +3,34 @@ import alsaaudio as aa
 import threading
 import struct
 import yaml
+from yaml import SafeLoader
 from datetime import datetime
 
-# Defining Networking Parameters
-ingestHostIP = '127.0.0.1'  # IP for ingestor, which is hosting the server with both the BMI and Jetson
-ingestListenerPort = 36783  # Port for the listener on the ingestor host server
+# Getting Networking and Audio Parameters from Settings File
+with open('settings.yaml', 'r') as settingsFile:
+    data = list(yaml.load(settingsFile, Loader=SafeLoader))
+    
+    # Network settings
+    ingestHostIP = data[0]['ingestorSettings']['ingestorIPAddress']
+    ingestListenerPort = data[0]['ingestorSettings']['ingestorListenerPort']
+    ingestJetsonPort = data[1]['jetsonSettings']['ingestorJetsonCommPort']
+    jetsonHostIP = data[1]['jetsonSettings']['jetsonIPAddress']
+    jetsonListenerPort = data[1]['jetsonSettings']['jetsonListenerPort']
+
+    # Microphone Settings
+    channels = data[4]['audioSettings']['channels']
+    rate = data[4]['audioSettings']['rate']
+    framerate = data[3]['bufferSettings']['framerate']
+    chunkSize = 2 * int(rate / framerate)
+
+    # Speaker Settings
+    speakerAmplitude = data[5]['speakerSettings']['amplitude']
+    speakerBlockSize = data[5]['speakerSettings']['blockSize']
+
+    settingsFile.close()
+
 
 # Defining Audio Parameters
-channels = 1
-rate = 44100
-format = aa.PCM_FORMAT_S16_LE
-chunkSize = 882 * 2         # Multiplied by two because each sample is 16-bit
 metadataSize = 26 + 26 + 4  # 26*2 for time taken and time received, and 4 for framecount
 
 # Defining Frequency Stream Parameters

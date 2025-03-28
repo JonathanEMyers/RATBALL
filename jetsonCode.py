@@ -1,23 +1,56 @@
 import alsaaudio as aa
+import sounddevice as sd
 import threading
 import socket
 import time
 import collections
 import numpy as np
 import struct
+import yaml
+from yaml import SafeLoader
 from datetime import datetime
 
+
+# TO-DO:
+#   - When I can use the jetson, mic, and speaker, assign the specific PCM/output devices
+
+
+# Getting Networking and Audio Parameters from Settings File
+with open('settings.yaml', 'r') as settingsFile:
+    data = list(yaml.load(settingsFile, Loader=SafeLoader))
+    
+    # Network settings
+    ingestHostIP = data[0]['ingestorSettings']['ingestorIPAddress']
+    ingestListenerPort = data[0]['ingestorSettings']['ingestorListenerPort']
+    ingestJetsonPort = data[1]['jetsonSettings']['ingestorJetsonCommPort']
+    jetsonHostIP = data[1]['jetsonSettings']['jetsonIPAddress']
+    jetsonListenerPort = data[1]['jetsonSettings']['jetsonListenerPort']
+
+    # Microphone Settings
+    CHANNELS = data[4]['audioSettings']['channels']
+    RATE = data[4]['audioSettings']['rate']
+
+    if('S16_LE' in data[4]['audioSettings']['format']):
+        FORMAT = aa.PCM_FORMAT_S16_LE
+    
+    bufferLength = data[3]['bufferSettings']['bufferLength']
+    framerate = data[3]['bufferSettings']['framerate']
+
+    # Speaker Settings
+    speakerAmplitude = data[5]['speakerSettings']['amplitude']
+    speakerBlockSize = data[5]['speakerSettings']['blockSize']
+
+    settingsFile.close()
+
+
 # Set capture parameters
-FORMAT = aa.PCM_FORMAT_S16_LE
-CHANNELS = 1
-RATE = 44100
-CHUNK_SIZE = 882
-numSeconds = 10
+CHUNK_SIZE = int(RATE / framerate)
 metadataSize = 26 + 26 + 4     # 26 for both timestamps and 4 for the frameCount integer
 frameCounter = 1
 
+
 # Setting Buffer Parameters
-bufferSize = numSeconds * 50
+bufferSize = bufferLength * framerate
 audioBufferOne = collections.deque(maxlen=bufferSize)
 audioMetaBufferOne = collections.deque(maxlen=bufferSize)
 audioBufferTwo = collections.deque(maxlen=bufferSize)
@@ -25,11 +58,10 @@ audioMetaBufferTwo = collections.deque(maxlen=bufferSize)
 whichBuffer = True             # True for bufferOne, False for bufferTwo
 beginStop = False
 
+
 # Set Speaker Parameters
-periodLength = .5 # Seconds
-amplitude = .1
-periodSize = 1024
-t = np.linspace(0, periodLength, RATE)
+speakerFrequency = 0
+
 
 # Open PCM Device for Microphone
 micInput = aa.PCM(type=aa.PCM_CAPTURE, 
@@ -39,30 +71,14 @@ micInput = aa.PCM(type=aa.PCM_CAPTURE,
                   format=FORMAT, 
                   periodsize=CHUNK_SIZE)
 
-# Open PCM Device for Speaker
-speaker = aa.PCM(type=aa.PCM_PLAYBACK, 
-                 mode=aa.PCM_NORMAL, 
-                 channels=CHANNELS, 
-                 rate=RATE, 
-                 format=FORMAT, 
-                 periodsize=periodSize)
-
-
-# Defining Server Parameters
-ingestHostIP = '127.0.0.1'
-ingestListenerPort = 36783
-ingestPort = 36784
 
 # Connecting to Server
 ingestSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ingestSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
-ingestSocket.bind(('127.0.0.1', ingestPort))
+ingestSocket.bind((ingestHostIP, ingestJetsonPort))
 ingestSocket.connect((ingestHostIP, ingestListenerPort))
 print("In audioRecordingClient -- Connected to ingestor!")
 
-# Defining Client-to-Client Parameters
-jetsonHostIP = '127.0.0.1'  # IP Address of Jetson -- Jetson is hosting this connection
-jetsonListenerPort = 36786    # Listener port for jetson server
 
 # Establishing Peer-to-Peer Server
 BMISocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)   # Socket for jetson-bmi connection, named as such
@@ -100,27 +116,6 @@ def recvAll(sock, size):
 
 
 
-# This is a function to generate a waveform to be played over the speaker.
-#
-# The waveform will be a sine wave with a designated frequency, the value
-# of which will be sent over the network from the BMI.
-# 
-# A frequency of -1 designates no data to be output to the speaker.
-def generateWaveform(frequency):
-    if(frequency != -1):
-    
-        sineWave = amplitude * np.sin(2 * np.pi * frequency * t);
-        audioData = sineWave.astype('float32').tobytes();
-    else:
-        audioData = -1
-    
-    return(audioData)
-
-
-
-
-
-
 
 
 # recordAudio() is a function to input audio from an ALSAaudio device
@@ -150,6 +145,7 @@ def recordAudio():
         length, data = micInput.read()
 
         if length:
+            # print(f"Buffer One Size: {len(audioBufferOne)}, Buffer Two Size: {len(audioBufferTwo)}")
             # Print statements for chatter
             # print("In audioRecordingClient.recordAudio() -- Got audio data!")
             # print("Length of audio buffer one:")
@@ -341,37 +337,55 @@ def sendAudio():
 
 def recieveStop():
     global beginStop
+    global speakerFrequency
 
     print("In audioRecordingClient.recieveStop() -- Stopping thread is executing.")
 
-    stopMessage = recvAll(BMIConn, 10)
 
-    if(stopMessage.startswith(b'BEGIN_STOP')):
-        print("In audioRecordingClient.recieveStop() -- Received beginStop trigger!")
-        beginStop = True
-    else:
-        print("In audioRecordingClient.recieveStop() -- Error: Did not receive beginStop trigger.")
+    while(not beginStop):
+        message = recvAll(BMIConn, 10)
+
+        if(message.startswith(b'BEGIN_STOP')):
+            print("In audioRecordingClient.recieveStop() -- Received beginStop trigger!")
+            beginStop = True
+        else:
+            speakerFrequency = struct.unpack('>f', message[:4])[0]
+            extraBytes = message[4:]
+            
+
+
+
+
+
+
+
+# Uses sounddevice outputstream because alsaaudio pcm write was having issues
+# with discontinuites creating weird harmonics, causing distorted sound.
+# This allows constant audio stream and also phase shift of the waveform.
+def audioCallback(outdata, frames, time, status):
+    global speakerFrequency
+    t = (np.arange(frames) + audioCallback.phase) / RATE
+    wave = speakerAmplitude * np.sin(2 * np.pi * speakerFrequency * t)
+    outdata[:] = wave.reshape(-1, 1)
+    audioCallback.phase += frames  # Keep track of phase
+audioCallback.phase = 0  # Initial phase
+
+
+
+
+
+
+
+# Opens an output stream to the speaker device, and waits until the beginStop transmission is sent 
+# from the BMI to stop the playback.
+def speakerPlayback():
+    global beginStop
+    global speakerFrequency
+
+    with sd.OutputStream(callback=audioCallback, samplerate=RATE, blocksize=speakerBlockSize, channels=1):
+        while not beginStop:
+            time.sleep(.1)
     
-
-
-
-
-
-
-
-
-# def recieveFrequency():
-#     while True:
-#         frequency = conn.recv(4)
-#         frequency = struct.unpack('!f', frequency)[0]
-#         print(frequency)
-
-#         audioData = generateWaveform(frequency)
-
-#         speaker.write(audioData)
-
-
-
 
 
 
@@ -391,12 +405,13 @@ sendingThread.start()
 stoppingThread = threading.Thread(target=recieveStop, daemon=True)
 stoppingThread.start()
 
+speakerThread = threading.Thread(target=speakerPlayback, daemon=True)
+speakerThread.start()
+
 # The join function waits to close the main thread until the thread that the join
 # function is being called on finishes. I was encountering issues with the main thread
 # doing this and it was throwing errors.
 stoppingThread.join()
 recordingThread.join()
 sendingThread.join()
-
-# receiveFrequencyThread = threading.Thread(target = recieveFrequency, daemon=True)
-# receiveFrequencyThread.start()
+speakerThread.join()
