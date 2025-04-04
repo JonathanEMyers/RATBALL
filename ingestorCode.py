@@ -5,6 +5,9 @@ import struct
 import yaml
 from yaml import SafeLoader
 from datetime import datetime
+import os
+import cv2
+import numpy as np
 
 # Getting Networking and Audio Parameters from Settings File
 with open('settings.yaml', 'r') as settingsFile:
@@ -31,7 +34,9 @@ with open('settings.yaml', 'r') as settingsFile:
 
 
 # Defining Audio Parameters
-metadataSize = 26 + 26 + 4  # 26*2 for time taken and time received, and 4 for framecount
+audioMetaSize = 26
+videoMetaSize = 26
+metadataSize = audioMetaSize + videoMetaSize + 26 + 4       # 26 for timeSent and 4 for frameCount
 
 # Defining Frequency Stream Parameters
 frequency = 200.0
@@ -39,6 +44,12 @@ frequency = 200.0
 # Flags to begin and end stopping program
 beginStop = False
 endStop = False
+
+# Defining path for camera frames
+SAVE_DIR = "captured_frames"
+
+if not os.path.exists(SAVE_DIR):
+    os.makedirs(SAVE_DIR)
 
 # Creating Server
 ingestorSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -86,8 +97,10 @@ def recvAll(sock, size):
 
 def audioClient():
     global endStop
-    lastTime = 0
-    currentTime = 0
+    lastAudioTime = 0
+    lastVideoTime = 0
+    currentAudioTime = 0
+    currentVideoTime = 0
 
     # Opening audio storage file
     with open("audioOne.raw", "wb") as fAudio:
@@ -100,7 +113,7 @@ def audioClient():
             while(not endStop):
 
                 # Recieving entire packet
-                totalPacket = recvAll(jetsonConn, metadataSize + chunkSize)
+                totalPacket = recvAll(jetsonConn, metadataSize + chunkSize + 2*1280*720*3)
                 now = datetime.now()
 
                 # Packet not recieved
@@ -119,32 +132,72 @@ def audioClient():
                     metadata = totalPacket[:metadataSize]
                     data = totalPacket[metadataSize:]
 
+                    # Splitting data into audio and video elements
+                    audioData = data[:chunkSize]
+                    camZeroFlat = data[chunkSize:(1280*720*3 + chunkSize)]
+                    camOneFlat = data[(1280*720*3 + chunkSize):]
+
                     # Splitting metadata into respective elements
-                    timeTaken = metadata[:26].decode("utf-8")
-                    timeSent = metadata[26:52].decode("utf-8")
-                    frameCountPacked = metadata[52:]         # Unpacks integer with struct
+                    frameCountPacked = metadata[:4]
+                    timeSent = metadata[4:(4+26)]
+                    audioTimeTaken = metadata[(4+26):(4+26+26)]
+                    videoTimeTaken = metadata[(4+26+26):]
+
                     frameCount = struct.unpack(">I", frameCountPacked)[0]
                     timeReceived = now.strftime("%Y-%m-%d %H:%M:%S.%f")
 
                     # Calculating jitter between previous and current timeTakens
-                    currentTime = (int(timeTaken[11:12]) * 60 * 60 * 1000) + (int(timeTaken[14:15]) * 60 * 1000) + (int(timeTaken[17:18]) * 1000) + int(timeTaken[20:])
-                    timeDelta = currentTime - lastTime
+                    currentAudioTime = (int(audioTimeTaken[11:12]) * 60 * 60 * 1000) + (int(audioTimeTaken[14:15]) * 60 * 1000) + (int(audioTimeTaken[17:18]) * 1000) + int(audioTimeTaken[20:])
+                    currentVideoTime = (int(videoTimeTaken[11:12]) * 60 * 60 * 1000) + (int(videoTimeTaken[14:15]) * 60 * 1000) + (int(videoTimeTaken[17:18]) * 1000) + int(videoTimeTaken[20:])
+                    
+                    audioTimeDelta = currentAudioTime - lastAudioTime
+                    videoTimeDelta = currentVideoTime - lastVideoTime
 
-                    lastTime = currentTime
+                    lastAudioTime = currentAudioTime
+                    lastVideoTime = currentVideoTime
+
+                    # Reshaping camera data into original shape
+                    camZeroInt = np.frombuffer(camZeroFlat, dtype=np.uint8)
+                    camZeroData = camZeroInt.reshape((720, 1280, 3))
+
+                    camOneInt = np.frombuffer(camOneFlat, dtype=np.uint8)
+                    camOneData = camOneInt.reshape((720, 1280, 3))
+
+                    # Generating filenames for camera frames
+                    camZeroFilename = os.path.join(SAVE_DIR, f"cam0_frame_{frameCount}.raw")
+                    camOneFilename = os.path.join(SAVE_DIR, f"cam1_frame_{frameCount}.raw")
+
+                    # Writing audio data into file -- If array is all zeros then there was only video data
+                    if(audioData != bytearray(chunkSize)):
+                        fAudio.write(audioData)
+                    else:
+                        print("In audioRecordingServer.audioClient() -- No audio data received!")
+                        audioTimeTaken = "NULL"
+                        audioTimeDelta = "NULL"
+                    
+                    # Writing video data into file -- If array is all zeros then there was only audio data
+                    if(camZeroFlat != bytearray(1280 * 720 * 3) and camOneFlat != bytearray(1280 * 720 * 3)):
+                        camZeroData.tofile(camZeroFilename)
+                        camOneData.tofile(camOneFilename)
+                    else:
+                        print("In audioRecordingServer.audioClient() -- No audio data received!")
+                        videoTimeTaken = "NULL"
+                        videoTimeDelta = "NULL"
+
 
                     # Creating metadata struct
                     metaEntry = {
                         "Frame_Instance": {
                             "Frame_Count": frameCount,
-                            "Time_Taken": timeTaken,
+                            "Audio_Time_Taken": audioTimeTaken,
+                            "Video_Time_Taken": videoTimeTaken,
                             "Time_Sent": timeSent,
                             "Time_Received": timeReceived,
-                            "Time_Delta": timeDelta
+                            "Audio_Time_Delta": audioTimeDelta,
+                            "Video_Time_Delta": videoTimeDelta
                         }
                     }
 
-                    # Writing data into files
-                    fAudio.write(data)
                     yaml.dump([metaEntry], fMeta, default_flow_style=False, allow_unicode=True)
     
     # Program has stopped, so it is safe to close all openings
