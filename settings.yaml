@@ -1,0 +1,22 @@
+- ingestorSettings:
+    ingestorIPAddress: 127.0.0.1
+    ingestorListenerPort: 36783
+- jetsonSettings:
+    ingestorJetsonCommPort: 36784
+    jetsonIPAddress: 127.0.0.1
+    jetsonListenerPort: 36786
+- BMISettings:
+    BMIIPAddress: 127.0.0.1
+    ingestorBMICommPort: 36785
+    jetsonBMICommPort: 36787
+- bufferSettings:
+    bufferLength: 10
+    framerate: 30
+- audioSettings:
+    channels: 1
+    format: S16_LE
+    rate: 44100
+- speakerSettings:
+    channels: 1
+    blockSize: 4096
+    amplitude: .5
