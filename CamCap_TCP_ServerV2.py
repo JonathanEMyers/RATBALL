@@ -64,8 +64,8 @@ def handle_client(conn, addr):
             lines = meta_str.split('\n')
 
             # Take in shape and data type for frames
-            cam0_shape_str, cam0_dtype = lines[0].split(',')
-            cam1_shape_str, cam1_dtype = lines[1].split(',')
+            cam0_shape_str, cam0_dtype = lines[0].split('*')
+            cam1_shape_str, cam1_dtype = lines[1].split('*')
 
             cam0_shape = tuple(map(int, cam0_shape_str.strip('()').split(',')))
             cam1_shape = tuple(map(int, cam1_shape_str.strip('()').split(',')))
@@ -74,12 +74,12 @@ def handle_client(conn, addr):
             print(f"meta cam0: shape={cam1_shape}, datatype={cam1_dtype}")
 
             # Take in compressed frame data
-            cam0_compressed = receive_full_data(conn, cam0_size)
-            cam1_compressed = receive_full_data(conn, cam1_size)
+            cam0_raw = receive_full_data(conn, cam0_size)
+            cam1_raw = receive_full_data(conn, cam1_size)
 
-            # Decompress the data
-            cam0_raw = zlib.decompress(cam0_compressed)
-            cam1_raw = zlib.decompress(cam1_compressed)
+            # # Decompress the data
+            # cam0_raw = zlib.decompress(cam0_compressed)
+            # cam1_raw = zlib.decompress(cam1_compressed)
 
             # convert raw back into numpy arrays
             cam0_frame = np.frombuffer(cam0_raw, dtype=cam0_dtype).reshape(cam0_shape)
@@ -97,8 +97,8 @@ def handle_client(conn, addr):
 
             frame_counter += 1
     
-    except Exception as e:
-        print(f"Error with {addr}: {e}")
+    # except Exception as e:
+    #     print(f"Error with {addr}: {e}")
     finally:
         frame_counter = 0
         print(f"Connection closed: {addr}")
@@ -136,8 +136,9 @@ def start_server():
     while True:
         conn, addr = server_socket.accept()
         stop_event.clear()  # Ensure stop event is cleared before handling a new client
-        client_thread = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
-        client_thread.start()
+        # client_thread = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
+        # client_thread.start()
+        handle_client(conn, addr)
 
 if __name__ == "__main__":
     start_server()
