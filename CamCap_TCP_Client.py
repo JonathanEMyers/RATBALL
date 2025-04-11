@@ -1,27 +1,26 @@
  # 
- # File: CamCap_Client_V2.0.py
+ # File: CamCap_TCP_Client.py
  # Copy: Copyright (c) 2025 Tyler C. Brasher
  # BlazerID: brashert
  # Desc: Script to capture frames from two CSI cameras and stream it over TCP/IP
  # 
 
-
 import cv2 # computer vision library
 import time # manipulation of time
+import os # interface with operating system
 import socket # Networking library
 import struct #  s t r u c t u r e s
+import zlib # data compression for easy data transmission
 import threading # make the CPU not panic
 from datetime import datetime # part 2 electric boogaloo
 
 # Server configuration 
-SERVER_IP = "192.168.2.57"  # Change this to the remote machine's IP
+SERVER_IP = "192.168.2.57"
 SERVER_PORT = 10000
-
-capture_done = False
 
 # Capture settings
 framerate = 30
-# buffer_switch_time = 10  # Switch buffers every 10 seconds
+buffer_switch_time = 10  # Switch buffers every 10 seconds
 
 # Define camera pipeline
 def gstreamer_pipeline(sensor_id=0, width=1280, height=720):
@@ -33,7 +32,7 @@ def gstreamer_pipeline(sensor_id=0, width=1280, height=720):
         f"videoconvert ! video/x-raw, format=BGR ! appsink"
     )
 
-# Initalize both cameras
+# Initialize cameras
 cap0 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=0), cv2.CAP_GSTREAMER)
 cap1 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=1), cv2.CAP_GSTREAMER)
 
@@ -48,102 +47,157 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.connect((SERVER_IP, SERVER_PORT))
 print(f"Connected to server at {SERVER_IP}:{SERVER_PORT}")
 
-frame_queue = []  # Shared queue for frames
-data_lock = threading.Lock()
+# Buffer initialization
+buffer_a = []
+buffer_b = []
+active_buffer = buffer_a
+buffer_lock = threading.Lock()
+buffer_ready = threading.Event()
+stop_event = threading.Event()  # Event to stop everything
+flush_event = threading.Event()  # Event to signal buffer flush
 
-def send_frames():
-    global capture_done
-    while not capture_done or frame_queue:
-        with data_lock:
-            if frame_queue:
-                frame_data = frame_queue.pop(0)
+# Function to capture frames
+def capture_frames():
+    global active_buffer
+    frame_interval = 1 / framerate
+
+    while not stop_event.is_set():
+        start_time = time.perf_counter()
+        while (time.perf_counter() - start_time < buffer_switch_time) and not stop_event.is_set():
+            frame_start = time.perf_counter()
+            ret0, frame0 = cap0.read()
+            ret1, frame1 = cap1.read()
+
+            if not (ret0 and ret1):
+                print("Error: Failed to grab frame from one or both cameras.")
+                stop_event.set()
+                break
+
+            # Time stamp overlay to frames
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")[:-3]
+            cv2.putText(frame0, timestamp, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(frame1, timestamp, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+
+            # Flatten the arrays into raw bytes
+            cam0_bytes = frame0.tobytes()
+            cam1_bytes = frame1.tobytes()
+
+            # Compress the raw data for transmission if needed
+            # cam0_compressed = zlib.compress(cam0_bytes)
+            # cam1_compressed = zlib.compress(cam1_bytes)
+
+            # Metadata: Shape and data type for each frame
+            cam0_meta = f"{frame0.shape}*{frame0.dtype.name}\n"
+            cam1_meta = f"{frame1.shape}*{frame1.dtype.name}\n"
+            print(f"Cam0 Meta before encode: '{cam0_meta}'")
+            print(f"Cam1 Meta before encode: '{cam1_meta}'")
+
+            metadata = (cam0_meta + cam1_meta).encode('utf-8')
+            meta_size = 256 # fixed for now, will likely move to config
+            metadata = metadata.ljust(meta_size, b' ') # add padding
+            print(f"metadata: {metadata}")
+
+            # COMPRESSED header for sizes of the data
+            # print(f"Packed cam0 frame size: {len(cam0_compressed)} bytes, cam1 size: {len(cam1_compressed)} bytes")
+            # header = struct.pack(">LL", len(cam0_compressed), len(cam1_compressed))
+            # print(f"Packed header size: {header}")
+            # print(f"Client sending header: {header.hex()}, cam0_size={len(cam0_compressed)}, cam1_size={len(cam1_compressed)}")
+
+            # header for sizes of the data
+            print(f"Packed cam0 frame size: {len(cam0_bytes)} bytes, cam1 size: {len(cam1_bytes)} bytes")
+            header = struct.pack(">LL", len(cam0_bytes), len(cam1_bytes))
+            print(f"Packed header size: {header}")
+            print(f"Client sending header: {header.hex()}, cam0_size={len(cam0_bytes)}, cam1_size={len(cam1_bytes)}")
+
+
+            # message: header + metadata + frames
+            # message = header + metadata + cam0_compressed + cam1_compressed
+            message = header + metadata + cam0_bytes + cam1_bytes
+            # message = metadata + cam0_bytes + cam1_bytes
+
+            # Append to buffer
+            with buffer_lock:
+                active_buffer.append(message)
+
+            elapsed_time = time.perf_counter() - frame_start
+            time.sleep(max(0, frame_interval - elapsed_time))
+
+        # Swap buffers
+        with buffer_lock:
+            if active_buffer is buffer_a:
+                active_buffer = buffer_b
             else:
-                frame_data = None
+                active_buffer = buffer_a
+            buffer_ready.set()  # Signal sender thread
 
-        if frame_data:
+    print("Capture thread exiting...")
+    flush_event.set()  # Signal sender to flush remaining frames
+
+# Function to send frames
+def send_frames():
+    while not stop_event.is_set() or buffer_ready.is_set() or flush_event.is_set():
+        buffer_ready.wait()  # Wait for a full buffer or stop signal
+
+        with buffer_lock:
+            if active_buffer is buffer_a:
+                send_buffer = buffer_b[:]
+                buffer_b.clear()
+            else:
+                send_buffer = buffer_a[:]
+                buffer_a.clear()
+            buffer_ready.clear()  # Reset signal
+
+        # Send all frames in the buffer
+        for message in send_buffer:
             try:
-                size = struct.pack(">L", len(frame_data))
-                client_socket.sendall(size)
-                client_socket.sendall(frame_data)
-                print(f"Sent frame of size {len(frame_data)} bytes")
+                size = struct.pack(">L", len(message))
+                # print(f"Block Size: {len(size)}")
+                # client_socket.sendall(size)
+                client_socket.sendall(message)
             except Exception as e:
                 print(f"Error sending frame: {e}")
-                break
-        else:
-            time.sleep(0.01)  # Small sleep to avoid busy-waiting
+                stop_event.set()
+                return
 
+    print("Sender thread exiting...")
 
-# Function to capture frames in its own thread
-def capture_frames():
-    global capture_done
-    start_time = time.perf_counter()
-    frame_count = 0
-    fps = framerate
-    duration = 10  # Capture for 10 seconds
-    frame_interval = 1 / fps
-
-    while time.perf_counter() - start_time < duration:
-        frame_start = time.perf_counter()
-        ret0, frame0 = cap0.read()
-        ret1, frame1 = cap1.read()
-
-        if not (ret0 and ret1):
-            print("Error: Failed to grab frame from one or both cameras.")
+# Function to listen for STOP command from server
+def listen_for_stop():
+    while not stop_event.is_set():
+        msg = client_socket.recv(1024)
+        if not msg:
+            break  # Connection closed
+        msg = msg.decode().strip()
+        if "STOP" in msg:  # In case multiple messages are received
+            print("Received STOP command from server.")
+            stop_event.set()
+            buffer_ready.set()  
+            flush_event.set()  
             break
 
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")[:-3]
-        cv2.putText(frame0, timestamp, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(frame1, timestamp, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
-        # Flatten the arrays into raw bytes
-        cam0_bytes = frame0.tobytes()
-        cam1_bytes = frame1.tobytes()
-
-        # Metadata: Shape and data type for each frame
-        cam0_meta = f"{frame0.shape}*{frame0.dtype.name}\n"
-        cam1_meta = f"{frame1.shape}*{frame1.dtype.name}\n"
-        # print(f"Cam0 Meta before encode: '{cam0_meta}'")
-        # print(f"Cam1 Meta before encode: '{cam1_meta}'")
-
-        metadata = (cam0_meta + cam1_meta).encode('utf-8')
-        print(f"Encoded meta: '{metadata}'")
-        meta_size = 256 # fixed for now, will likely move to config
-        metadata = metadata.ljust(meta_size, b' ') # add padding
-        print(f"padded metadata: '{metadata}'")
-
-        # Package the data together for transmission
-        frame_data = metadata + cam0_bytes + cam1_bytes
-
-
-        with data_lock:
-            frame_queue.append(frame_data)
-        
-        print(f"Captured frame {frame_count}")  # Debug print
-
-        frame_count += 1
-        elapsed_time = time.perf_counter() - frame_start
-        sleep_time = max(0, frame_interval - elapsed_time)
-        time.sleep(sleep_time)
-
-    capture_done = True
-
-
-# Start frame capture in a separate thread
+# Start threads
+stop_listener_thread = threading.Thread(target=listen_for_stop, daemon=True)
 capture_thread = threading.Thread(target=capture_frames, daemon=True)
-capture_thread.start()
-
-
-# Start sender thread after some delay to ensure frames are captured
-time.sleep(1)  # Allow some frames to be captured
 sender_thread = threading.Thread(target=send_frames, daemon=True)
+
+stop_listener_thread.start()
+capture_thread.start()
 sender_thread.start()
 
-# Keep main thread alive
+# Wait for threads to complete
+stop_listener_thread.join()
 capture_thread.join()
+flush_event.set()  # Signal sender to flush remaining frames
+buffer_ready.set()  # Ensure sender finishes remaining frames
 sender_thread.join()
 
+# Cleanup
 client_socket.close()
 cap0.release()
 cap1.release()
 cv2.destroyAllWindows()
 print("Finished streaming frames.")
+
+
