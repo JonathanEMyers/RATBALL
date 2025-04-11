@@ -1,0 +1,23 @@
+[Unit]
+Description=Startup service for RATBALL
+After=network.target network-online.target local-fs.target sound.target multi-user.target
+Wants=network-online.target sound.target
+
+[Service]
+PAMName=login
+User=jemyers
+Type=simple
+ExecStartPre=/bin/sleep 10
+ExecStart=/bin/bash /home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/launchAudioSystem.sh
+WorkingDirectory=/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin"
+Environment="HOME=/home/jemyers"
+Environment="USER=jemyers"
+Environment="DISPLAY=:0"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

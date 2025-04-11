@@ -14,17 +14,23 @@ from datetime import datetime
 # TO-DO:
 #   - When I can use the jetson, mic, and speaker, assign the specific PCM/output devices
 
+settingsFilePath = '/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/settings.yaml'
+audioFilePath = '/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/TestAudio.raw'
+audioMetaFilePath = '/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/TestAudio.yaml'
+
 
 # Getting Networking and Audio Parameters from Settings File
-with open('settings.yaml', 'r') as settingsFile:
+with open(settingsFilePath, 'r') as settingsFile:
     data = list(yaml.load(settingsFile, Loader=SafeLoader))
     
     # Network settings
     ingestHostIP = data[0]['ingestorSettings']['ingestorIPAddress']
     ingestListenerPort = data[0]['ingestorSettings']['ingestorListenerPort']
     ingestJetsonPort = data[1]['jetsonSettings']['ingestorJetsonCommPort']
-    jetsonHostIP = data[1]['jetsonSettings']['jetsonIPAddress']
-    jetsonListenerPort = data[1]['jetsonSettings']['jetsonListenerPort']
+
+    BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
+    BMIListenerPort = data[2]['BMISettings']['BMIListenerPort']
+    BMIJetsonPort = data[1]['jetsonSettings']["BMIJetsonCommPort"]
 
     # Microphone Settings
     CHANNELS = data[4]['audioSettings']['channels']
@@ -63,31 +69,41 @@ beginStop = False
 speakerFrequency = 0
 
 
-# Open PCM Device for Microphone
-micInput = aa.PCM(type=aa.PCM_CAPTURE, 
-                  mode=aa.PCM_NORMAL, 
-                  channels=CHANNELS, 
-                  rate=RATE, 
-                  format=FORMAT, 
-                  periodsize=CHUNK_SIZE)
+# Open PCM Device for Microphone (have to include a retry because of late booting of virtual audio card on startup)
+print("In jetsonCode.py -- Attempting to start capture device.")
+maxRetries = 10
+for attempt in range(maxRetries):
+    try:
+        micInput = aa.PCM(type=aa.PCM_CAPTURE, 
+                          mode=aa.PCM_NORMAL, 
+                         channels=CHANNELS, 
+                         rate=RATE, 
+                         format=FORMAT, 
+                         periodsize=CHUNK_SIZE)
+        break
+    except aa.ALSAAudioError as e:
+        print(f"In jetsonCode.py -- [Attempt {attempt+1}] ALSA not ready: {e}")
+        time.sleep(1)
+else:
+    raise RuntimeError("In jetsonCode.py -- Failed to initialize ALSAAudioDevice after multiple attempts.")
+
+print("In jetsonCode.py -- Started microphone capture device.")
 
 
-# Connecting to Server
+# Connecting to Ingestor Server
 ingestSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ingestSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
 ingestSocket.bind((ingestHostIP, ingestJetsonPort))
 ingestSocket.connect((ingestHostIP, ingestListenerPort))
-print("In audioRecordingClient -- Connected to ingestor!")
+print("In jetsonCode -- Connected to ingestor!")
 
 
-# Establishing Peer-to-Peer Server
-BMISocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)   # Socket for jetson-bmi connection, named as such
-BMISocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-BMISocket.bind((jetsonHostIP, jetsonListenerPort))
-BMISocket.listen(1)
-
-BMIConn, BMIAddr = BMISocket.accept()
-print(f"In audioRecordingClient -- Connected to BMI through {BMIAddr}")
+# Connecting to BMI Server
+BMISocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+BMISocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
+BMISocket.bind((BMIHostIP, BMIJetsonPort))
+BMISocket.connect((BMIHostIP, BMIListenerPort))
+print("In jetsonCode -- Connected to BMI!")
 
 
 
@@ -139,7 +155,7 @@ def recordAudio():
     global beginStop
 
     while(not beginStop):
-        # print("In audioRecordingClient.recordAudio() -- Entered recordAudio while loop!")
+        # print("In jetsonCode.recordAudio() -- Entered recordAudio while loop!")
 
         # Getting data from microphone
         length, data = micInput.read()
@@ -147,7 +163,7 @@ def recordAudio():
         if length:
             # print(f"Buffer One Size: {len(audioBufferOne)}, Buffer Two Size: {len(audioBufferTwo)}")
             # Print statements for chatter
-            # print("In audioRecordingClient.recordAudio() -- Got audio data!")
+            # print("In jetsonCode.recordAudio() -- Got audio data!")
             # print("Length of audio buffer one:")
             # print(len(audioBufferOne))
             # print(len(audioMetaBufferOne))
@@ -187,7 +203,7 @@ def recordAudio():
                     # print(len(audioBufferTwo))
 
             else:
-                print("In audioRecordingClient.recordAudio() -- Unsupported flag value!")
+                print("In jetsonCode.recordAudio() -- Unsupported flag value!")
             
 
 
@@ -224,11 +240,11 @@ def sendAudio():
     # knows when the buffer is empty and can accept a new metadata packet.
 
     while(not endStop):
-        # print("In audioRecordingClient.sendAudio(): Entered sendAudio while loop!")
+        # print("In jetsonCode.sendAudio(): Entered sendAudio while loop!")
 
         # Handling condition if program was told to stop via transmission from BMI (forwarded from Ingestor)
         if(beginStop == True):
-            # print("audioRecordingClient.py -- Entered beginStop if statement!")
+            # print("jetsonCode.py -- Entered beginStop if statement!")
 
             # endStop flag becomes true once all data is saved from buffers (to prevent data loss on shutdown)
             while(not endStop):
@@ -257,27 +273,27 @@ def sendAudio():
 
                 # If data gathering from buffers was successful
                 if data:
-                    # print("Got data!")
+                    # print(totalPacket)
                     try:
                         ingestSocket.sendall(totalPacket)
                         # print("Packet sent!")
                     except Exception as e:
-                        print(f"Error in audioRecordingClient.sendAudio(): {e}")
+                        print(f"Error in jetsonCode.sendAudio(): {e}")
 
                     # Setting data back to null so it doesn't send the same data infinitely                            
                     data = None
 
                 # No more data in buffers, so it is safe to send transmission finished message to Ingestor
                 else:
-                    print("In audioRecordingClient.sendAudio() -- No data left, sending endStop trigger!")
+                    print("In jetsonCode.sendAudio() -- No data left, sending endStop trigger!")
                     try:
                         totalPacket = b'END_STOP' + bytearray(metadataSize + (2 * CHUNK_SIZE) - len(b"END_STOP"))
                         ingestSocket.sendall(totalPacket)
-                        print("In audioRecordingClient.sendAudio() -- Sent endStop trigger!")
+                        print("In jetsonCode.sendAudio() -- Sent endStop trigger!")
                         endStop = True
 
                     except Exception as e:
-                        print(f"In audioRecordingClient.sendAudio() -- Error in sendAudio(): {e}")
+                        print(f"In jetsonCode.sendAudio() -- Error in sendAudio(): {e}")
             
             
 
@@ -310,7 +326,7 @@ def sendAudio():
         # Buffer indicated by whichBuffer is empty, will probably occur at the start of a program run
         else:
             data = None
-            # print("In audioRecordingClient.sendAudio() -- Audio buffers are empty, probably just started program!")
+            # print("In jetsonCode.sendAudio() -- Audio buffers are empty, probably just started program!")
 
         # Sending data over TCP
         if data:
@@ -318,16 +334,15 @@ def sendAudio():
                 ingestSocket.sendall(totalPacket)
                 # print("Packet sent!")
             except Exception as e:
-                print(f"In audioRecordingClient.sendAudio() -- {e}")
+                print(f"In jetsonCode.sendAudio() -- {e}")
                 break
     
     # Closing all connections and such to stop program
-    print("In audioRecordingClient.sendAudio() -- Program has successfully concluded!")
+    print("In jetsonCode.sendAudio() -- Program has successfully concluded!")
     time.sleep(2)
     ingestSocket.close()
     BMISocket.close()
-    BMIConn.close()
-        
+    
 
 
 
@@ -339,14 +354,14 @@ def recieveStop():
     global beginStop
     global speakerFrequency
 
-    print("In audioRecordingClient.recieveStop() -- Stopping thread is executing.")
+    print("In jetsonCode.recieveStop() -- Stopping thread is executing.")
 
 
     while(not beginStop):
-        message = recvAll(BMIConn, 10)
+        message = recvAll(BMISocket, 10)
 
         if(message.startswith(b'BEGIN_STOP')):
-            print("In audioRecordingClient.recieveStop() -- Received beginStop trigger!")
+            print("In jetsonCode.recieveStop() -- Received beginStop trigger!")
             beginStop = True
         else:
             speakerFrequency = struct.unpack('>f', message[:4])[0]

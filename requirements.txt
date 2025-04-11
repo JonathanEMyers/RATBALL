@@ -1,0 +1,4 @@
+pyalsaaudio
+pyyaml
+numpy
+sounddevice

@@ -6,16 +6,18 @@ import yaml
 from yaml import SafeLoader
 from datetime import datetime
 
+settingsFilePath = '/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/settings.yaml'
+audioFilePath = '/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/TestAudio.raw'
+audioMetaFilePath = '/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/TestAudio.yaml'
+
 # Getting Networking and Audio Parameters from Settings File
-with open('settings.yaml', 'r') as settingsFile:
+with open(settingsFilePath, 'r') as settingsFile:
     data = list(yaml.load(settingsFile, Loader=SafeLoader))
     
     # Network settings
     ingestHostIP = data[0]['ingestorSettings']['ingestorIPAddress']
     ingestListenerPort = data[0]['ingestorSettings']['ingestorListenerPort']
     ingestJetsonPort = data[1]['jetsonSettings']['ingestorJetsonCommPort']
-    jetsonHostIP = data[1]['jetsonSettings']['jetsonIPAddress']
-    jetsonListenerPort = data[1]['jetsonSettings']['jetsonListenerPort']
 
     # Microphone Settings
     channels = data[4]['audioSettings']['channels']
@@ -45,15 +47,17 @@ ingestorSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ingestorSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 ingestorSocket.bind((ingestHostIP, ingestListenerPort))
 ingestorSocket.listen()
-print(f"In audioRecordingServer -- Listening on {ingestHostIP}:{ingestListenerPort}...")
+print(f"In ingestorCode -- Listening on {ingestHostIP}:{ingestListenerPort}...")
 
-# Accepting connection to audio recording client
-jetsonConn, jetsonAddr = ingestorSocket.accept()
-print(f"In audioRecordingServer -- Jetson is connected by {jetsonAddr}")
 
 # Accepting connection to stop program client
 BMIConn, BMIAddr = ingestorSocket.accept()
-print(f"In audioRecordingServer -- BMI is connected by {BMIAddr}")
+print(f"In ingestorCode -- BMI is connected by {BMIAddr}")
+
+
+# Accepting connection to audio recording client
+jetsonConn, jetsonAddr = ingestorSocket.accept()
+print(f"In ingestorCode -- Jetson is connected by {jetsonAddr}")
 
 
 
@@ -90,31 +94,33 @@ def audioClient():
     currentTime = 0
 
     # Opening audio storage file
-    with open("audioOne.raw", "wb") as fAudio:
+    with open(audioFilePath, "wb") as fAudio:
 
         # Opening metadata storage file
-        with open("audioOne.yaml", "w") as fMeta:
-            print("In audioRecordingServer.audioClient() -- Opened files!")
+        with open(audioMetaFilePath, "w") as fMeta:
+            print("In ingestorCode.audioClient() -- Opened files!")
 
             # Attempting to recieve TCP packets from jetson
             while(not endStop):
 
                 # Recieving entire packet
                 totalPacket = recvAll(jetsonConn, metadataSize + chunkSize)
+                # print(totalPacket)
                 now = datetime.now()
 
                 # Packet not recieved
                 if(totalPacket is None):
                     pass
-                    # print("Connection closed")
+                    # print("In ingestorCode.audioClient() -- Received NOTHING!")
 
                 # Transmission includes program stop program flag from Jetson
                 elif(totalPacket[:8] == b'END_STOP'):
-                    print("In audioRecordingServer.audioClient() -- Recieved endStop trigger!")
+                    print("In ingestorCode.audioClient() -- Recieved endStop trigger!")
                     endStop = True
 
                 # Transmission is normal data
                 else:
+                    # print("In ingestorCode.audioClient() -- Received valid data!")
                     # Splitting packet into metadata and data
                     metadata = totalPacket[:metadataSize]
                     data = totalPacket[metadataSize:]
@@ -170,11 +176,11 @@ def stoppingClient():
         # try:
         #     stopSignal = BMIConn.recv(10)
         #     if stopSignal:
-        #         print("In audioRecordingServer.stoppingClient() -- Stop signal received! Forwarding to audio client...")
+        #         print("In ingestorCode.stoppingClient() -- Stop signal received! Forwarding to audio client...")
         #         jetsonConn.sendall(stopSignal)
         #         break
         # except:
-        #     print("Error in audioRecordingServer.stoppingClient() -- Unable to send forward stop program flag!")
+        #     print("Error in ingestorCode.stoppingClient() -- Unable to send forward stop program flag!")
         #     break
 
 

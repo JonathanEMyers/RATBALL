@@ -1,26 +1,46 @@
 #!/bin/bash
 
+# Had issues with initializing ALSAaudio, so waiting for it to start here:
+echo "Waiting for ALSA to initialize..."
+for i in {1..120}; do
+    if arecord -l | grep -q "^card "; then
+        echo "ALSA initialized successfully."
+        break
+    fi
+    echo "ALSA not ready, retrying..."
+    sleep 2
+done
+
+if ! arecord -l | grep -q "^card "; then
+    echo "ALSA not ready after retries, exiting."
+    exit 1
+fi
+sleep 2
+echo "Starting audio system..."
+
 # Set the path to your virtual environment
 VENV_PATH="/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/audio"
+FILES_PATH="/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming"
 source "$VENV_PATH/bin/activate"
-pip install -r './requirements.txt'
+pip install -r '/home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/requirements.txt'
 
 # Start the server in the background
 printf '%s\n\n' "Starting server..."
-python3 ./ingestorCode.py &
+python3 /home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/ingestorCode.py &
 SERVER_PID="$!"
 sleep 2  # Wait for server to initialize
 
-# Start the sensor data client in the background
-printf '%s\n\n' "Starting sensor data client..."
-python3 ./jetsonCode.py &
-SENSOR_PID="$!"
-sleep 2  # Wait for client to connect
-
 # Start the stopping client (after some delay)
 printf '%s\n\n' "Triggering client shutdown..."
-python3 BMICode.py &
+python3 /home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/BMICode.py &
 STOP_PID="$!"
+sleep 2
+
+# Start the sensor data client in the background (after some delay)
+printf '%s\n\n' "Starting sensor data client..."
+python3 /home/jemyers/RBProjects/experimentation/25_03_21_AudioStreaming/jetsonCode.py &
+SENSOR_PID="$!"
+
 
 # Wait for stop client to finish
 wait $STOP_PID
