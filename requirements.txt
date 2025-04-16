@@ -1,0 +1,3 @@
+numpy==1.24.4
+sparkfun-qwiic-i2c==2.0.0
+sparkfun-qwiic-otos==2.0.0
