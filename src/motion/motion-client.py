@@ -8,6 +8,11 @@ from datetime import datetime, timezone
 # custom logger class:
 from logger import Logger
 
+import yaml
+try:
+    from yaml import CSafeLoader as SafeLoader
+except ImportError:
+    from yaml import SafeLoader
 
 # instantiate logger object (supports log-level aware reporting):
 logger = Logger('OpticalSensorClient', 3)

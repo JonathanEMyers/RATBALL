@@ -1,31 +1,45 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 
+# Most portable way to resolve script path, see: https://stackoverflow.com/a/246128
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+# Sanity-check: make sure our resolved path isn't empty
+if [[ -z "$SCRIPT_DIR" ]] ; then
+	printf '%s\n' 'Could not resolve working directory, exiting!'
+	exit 1
+fi
+
+# Compute the path to project root relative to resolved dir of this script
+PROJECT_ROOT_PATH="$SCRIPT_DIR/.."
+
+# Make sure we shut down all servers even after an interrupt
 cleanup_on_exit() {
-		if [[ -n "$STOP_PID" ]] ; then kill -9 "$STOP_PID" ; fi
-		if [[ -n "$SENSOR_PID" ]] ; then kill -9 "$SENSOR_PID" ; fi
-		if [[ -n "$SERVER_PID" ]] ; then kill -9 "$SERVER_PID" ; fi
-        printf '\n%s\n\n' "Received interrupt, killing all server PIDs. Goodbye!"
+        printf '\n%s\n\n' "Received interrupt, killing all server PIDs."
+	if [[ -n "$STOP_PID" ]]   ; then kill -9 "$STOP_PID"   ; fi
+	if [[ -n "$SENSOR_PID" ]] ; then kill -9 "$SENSOR_PID" ; fi
+	if [[ -n "$SERVER_PID" ]] ; then kill -9 "$SERVER_PID" ; fi
+        printf '\n%s\n\n' "Goodbye!"
 }
 trap cleanup_on_exit INT
 
-# Set the path to your virtual environment
-VENV_PATH="/home/ratball/code/venv"
+VENV_PATH="$PROJECT_ROOT_PATH/venv"
+MOTION_TELEMETRY_DIR="$PROJECT_ROOT_PATH/src/motion"
+
+
 source "$VENV_PATH/bin/activate"
 pip install -r './requirements.txt' > /dev/null 2>&1 
 
 # Start the server in the background
 printf '%s\n\n' "Starting server..."
-python3 ./opticalSensorServer.py &
+python3 "$MOTION_TELEMETRY/motion-server.py" &
 SERVER_PID="$!"
-#sleep 2  # Wait for server to initialize
 
 # Start the sensor data client in the background
 printf '%s\n\n' "Starting sensor data client..."
-python3 opticalSensorClient.py &
+python3 "$MOTION_TELEMETRY/motion-client.py" &
 SENSOR_PID="$!"
-sleep 2  # Wait for client to connect
 
 # Start the stopping client (after some delay)
 python3 programStopClient.py &
