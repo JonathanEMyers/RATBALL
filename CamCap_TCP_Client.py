@@ -10,9 +10,9 @@ import time # manipulation of time
 import os # interface with operating system
 import socket # Networking library
 import struct #  s t r u c t u r e s
-import zlib # data compression for easy data transmission
 import threading # make the CPU not panic
 from datetime import datetime # part 2 electric boogaloo
+import collections # Gotta collect them all! Nope, not how that phrase goes...
 
 # Server configuration 
 SERVER_IP = "192.168.2.57"
@@ -21,6 +21,7 @@ SERVER_PORT = 10000
 # Capture settings
 framerate = 30
 buffer_switch_time = 10  # Switch buffers every 10 seconds
+bufferSize = framerate * buffer_switch_time
 
 # Define camera pipeline
 def gstreamer_pipeline(sensor_id=0, width=1280, height=720):
@@ -29,7 +30,7 @@ def gstreamer_pipeline(sensor_id=0, width=1280, height=720):
         f"video/x-raw(memory:NVMM), width={width}, height={height}, format=NV12, framerate={framerate}/1 ! "
         f"nvvidconv flip-method=0 ! "
         f"video/x-raw, width={width}, height={height}, format=BGRx ! "
-        f"videoconvert ! video/x-raw, format=BGR ! appsink"
+        f"videoconvert ! video/x-raw, format=GRAY8 ! appsink"
     )
 
 # Initialize cameras
@@ -48,113 +49,108 @@ client_socket.connect((SERVER_IP, SERVER_PORT))
 print(f"Connected to server at {SERVER_IP}:{SERVER_PORT}")
 
 # Buffer initialization
-buffer_a = []
-buffer_b = []
-active_buffer = buffer_a
-buffer_lock = threading.Lock()
-buffer_ready = threading.Event()
-stop_event = threading.Event()  # Event to stop everything
-flush_event = threading.Event()  # Event to signal buffer flush
+camBufferOne = collections.deque(maxlen=bufferSize)
+# videoMetaBufferOne = collections.deque(maxlen=bufferSize)
+camBufferTwo = collections.deque(maxlen=bufferSize)
+# videoMetaBufferTwo = collections.deque(maxlen=bufferSize)
+
+whichVideoBuffer = True     # True for bufferOne, False for bufferTwo
+beginStop = False
 
 # Function to capture frames
 def capture_frames():
-    global active_buffer
+    global whichVideoBuffer
+    global beginStop
     frame_interval = 1 / framerate
 
-    while not stop_event.is_set():
-        start_time = time.perf_counter()
-        while (time.perf_counter() - start_time < buffer_switch_time) and not stop_event.is_set():
-            frame_start = time.perf_counter()
-            ret0, frame0 = cap0.read()
-            ret1, frame1 = cap1.read()
+    while (not beginStop):
+        frame_start = time.perf_counter()
+        ret0, frame0 = cap0.read()
+        ret1, frame1 = cap1.read()
 
-            if not (ret0 and ret1):
-                print("Error: Failed to grab frame from one or both cameras.")
-                stop_event.set()
-                break
+        if not (ret0 and ret1):
+            print("Error: Failed to grab frame from one or both cameras.")
+            stop_event.set()
+            break
 
-            # Time stamp overlay to frames
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")[:-3]
-            cv2.putText(frame0, timestamp, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-            cv2.putText(frame1, timestamp, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-
-
-            # Flatten the arrays into raw bytes
-            cam0_bytes = frame0.tobytes()
-            cam1_bytes = frame1.tobytes()
-
-            # Compress the raw data for transmission if needed
-            # cam0_compressed = zlib.compress(cam0_bytes)
-            # cam1_compressed = zlib.compress(cam1_bytes)
-
-            # Metadata: Shape and data type for each frame
-            cam0_meta = f"{frame0.shape}*{frame0.dtype.name}\n"
-            cam1_meta = f"{frame1.shape}*{frame1.dtype.name}\n"
-            print(f"Cam0 Meta before encode: '{cam0_meta}'")
-            print(f"Cam1 Meta before encode: '{cam1_meta}'")
-
-            metadata = (cam0_meta + cam1_meta).encode('utf-8')
-            meta_size = 256 # fixed for now, will likely move to config
-            metadata = metadata.ljust(meta_size, b' ') # add padding
-            print(f"metadata: {metadata}")
-
-            # COMPRESSED header for sizes of the data
-            # print(f"Packed cam0 frame size: {len(cam0_compressed)} bytes, cam1 size: {len(cam1_compressed)} bytes")
-            # header = struct.pack(">LL", len(cam0_compressed), len(cam1_compressed))
-            # print(f"Packed header size: {header}")
-            # print(f"Client sending header: {header.hex()}, cam0_size={len(cam0_compressed)}, cam1_size={len(cam1_compressed)}")
-
-            # header for sizes of the data
-            print(f"Packed cam0 frame size: {len(cam0_bytes)} bytes, cam1 size: {len(cam1_bytes)} bytes")
-            header = struct.pack(">LL", len(cam0_bytes), len(cam1_bytes))
-            print(f"Packed header size: {header}")
-            print(f"Client sending header: {header.hex()}, cam0_size={len(cam0_bytes)}, cam1_size={len(cam1_bytes)}")
+        # Time stamp overlay to frames
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")[:-3]
+        cv2.putText(frame0, timestamp, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(frame1, timestamp, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        print(timestamp)
 
 
-            # message: header + metadata + frames
-            # message = header + metadata + cam0_compressed + cam1_compressed
-            message = header + metadata + cam0_bytes + cam1_bytes
-            # message = metadata + cam0_bytes + cam1_bytes
+        # Flatten the arrays into raw bytes
+        cam0_bytes = frame0.tobytes()
+        cam1_bytes = frame1.tobytes()
 
-            # Append to buffer
-            with buffer_lock:
-                active_buffer.append(message)
+        # header for sizes of the data
+        print(f"Packed cam0 frame size: {len(cam0_bytes)} bytes, cam1 size: {len(cam1_bytes)} bytes")
 
-            elapsed_time = time.perf_counter() - frame_start
-            time.sleep(max(0, frame_interval - elapsed_time))
+        message = cam0_bytes + cam1_bytes
 
-        # Swap buffers
-        with buffer_lock:
-            if active_buffer is buffer_a:
-                active_buffer = buffer_b
-            else:
-                active_buffer = buffer_a
-            buffer_ready.set()  # Signal sender thread
+        # whichVideoBuffer being true means stack up bufferOne and transmit from bufferTwo
+        if(whichVideoBuffer == True):
+
+            # Appending audio data and metadata to associated lists
+            camBufferOne.append(message)
+            # videoMetaBufferOne.append(timestamp)
+
+            # Switching flag to indicate bufferOne is full
+            if(len(camBufferOne) >= bufferSize):
+                whichVideoBuffer = False
+
+        # whichVideoBuffer being false means stack up bufferTwo and transmit from bufferOne
+        elif(whichVideoBuffer == False):
+
+            # Appending audio data and metadata to associated lists
+            camBufferTwo.append(message)
+            # videoMetaBufferTwo.append(timestamp)
+            
+            # Switching flag to indicate bufferTwo is full
+            if(len(camBufferTwo) >= bufferSize):
+                whichVideoBuffer = True
+
+        else:
+            print("In audioRecordingClient.recordAudio() -- Unsupported flag value!")
+
+        elapsed_time = time.perf_counter() - frame_start
+        time.sleep(max(0, frame_interval - elapsed_time))
+        print(len(camBufferOne))
+        print(len(camBufferTwo))
+        print(whichVideoBuffer)
 
     print("Capture thread exiting...")
     flush_event.set()  # Signal sender to flush remaining frames
 
 # Function to send frames
 def send_frames():
-    while not stop_event.is_set() or buffer_ready.is_set() or flush_event.is_set():
-        buffer_ready.wait()  # Wait for a full buffer or stop signal
+    global whichVideoBuffer
+    global beginStop
+    endStop = False
+    isVideoData = True
+    while (not endStop):
 
-        with buffer_lock:
-            if active_buffer is buffer_a:
-                send_buffer = buffer_b[:]
-                buffer_b.clear()
-            else:
-                send_buffer = buffer_a[:]
-                buffer_a.clear()
-            buffer_ready.clear()  # Reset signal
+
+        # Getting video data -- Get data out of buffer one first, then two
+        if(not whichVideoBuffer and len(camBufferOne) > 0):
+            videoData = camBufferOne.popleft()
+            # videoMetadata = videoMetaBufferOne.popleft()
+            isVideoData = True
+        elif(whichVideoBuffer and len(camBufferTwo) > 0):
+            videoData = camBufferTwo.popleft()
+            # videoMetadata = videoMetaBufferTwo.popleft()
+            isVideoData = True
+        else:
+            videoData = bytearray(1280 * 720 * 1) + bytearray(1280 * 720 * 1)   # In case there is no more video data but there is still audio data
+            # videoMetadata = bytearray(videoMetaSize)
+            isVideoData = False
 
         # Send all frames in the buffer
-        for message in send_buffer:
+        if (isVideoData):
             try:
-                size = struct.pack(">L", len(message))
-                # print(f"Block Size: {len(size)}")
-                # client_socket.sendall(size)
-                client_socket.sendall(message)
+                size = struct.pack(">L", len(videoData))
+                client_socket.sendall(videoData)
             except Exception as e:
                 print(f"Error sending frame: {e}")
                 stop_event.set()
@@ -162,35 +158,34 @@ def send_frames():
 
     print("Sender thread exiting...")
 
-# Function to listen for STOP command from server
-def listen_for_stop():
-    while not stop_event.is_set():
-        msg = client_socket.recv(1024)
-        if not msg:
-            break  # Connection closed
-        msg = msg.decode().strip()
-        if "STOP" in msg:  # In case multiple messages are received
-            print("Received STOP command from server.")
-            stop_event.set()
-            buffer_ready.set()  
-            flush_event.set()  
-            break
+def recieveStop():
+    global beginStop
+
+    print("In audioRecordingClient.recieveStop() -- Stopping thread is executing.")
+
+
+    while(not beginStop):
+        message = recvAll(BMIConn, 10)
+
+        if(message.startswith(b'BEGIN_STOP')):
+            print("In audioRecordingClient.recieveStop() -- Received beginStop trigger!")
+            beginStop = True
+        else:
+            extraBytes = message[4:]
 
 
 # Start threads
-stop_listener_thread = threading.Thread(target=listen_for_stop, daemon=True)
+stoppingThread = threading.Thread(target=recieveStop, daemon=True)
 capture_thread = threading.Thread(target=capture_frames, daemon=True)
 sender_thread = threading.Thread(target=send_frames, daemon=True)
 
-stop_listener_thread.start()
+stoppingThread.start()
 capture_thread.start()
 sender_thread.start()
 
 # Wait for threads to complete
-stop_listener_thread.join()
+stoppingThread.join()
 capture_thread.join()
-flush_event.set()  # Signal sender to flush remaining frames
-buffer_ready.set()  # Ensure sender finishes remaining frames
 sender_thread.join()
 
 # Cleanup
