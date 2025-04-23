@@ -1,22 +1,12 @@
-[tool.poetry]
+[project]
 name = "ratball"
 version = "0.1.0"
-description = ""
-authors = ["Your Name <you@example.com>"]
+description = "Motion tracking and audio/visual telemetry platform for the RATBALL omni-treadmill system"
 readme = "README.md"
-package-mode = false
+requires-python = ">=3.8"
+dependencies = []
 
-[tool.poetry.dependencies]
-python = "^3.8"
-numpy = "^1.24.4"
-sparkfun-qwiic-i2c = "^2.0.0"
-sparkfun-qwiic-otos = "^2.0.0"
-pyalsaaudio = "^0.11.0"
-pyyaml = "^6.0.2"
-sounddevice = "^0.5.1"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
+[dependency-groups]
+dev = [
+    "ruff>=0.11.6",
+]

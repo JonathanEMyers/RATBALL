@@ -1,0 +1,45 @@
+# Sparkfun libraries for OTOS sensor tx/rx:
+import qwiic_otos
+# Python stdlib:
+from collections import deque # for buffers
+from datetime import datetime, timezone
+
+class Sensor:
+    BUF_SIZE = 36
+
+    def __init__(self, address):
+        self.address = address
+        self.device = qwiic_otos.QwiicOTOS(address=self.address)
+        self.data_buffer = deque(maxlen=self.BUF_SIZE)
+        self.meta_buffer = deque(maxlen=self.BUF_SIZE)
+
+        if not self.device.is_connected():
+            raise ConnectionError(f"Sensor at address {hex(self.address)} not connected.")
+
+    def begin(self):
+        self.device.begin()
+
+    def poll_data(self):
+        data = self.device.getPosVelAcc()
+        if data:
+            metadata = self.unix_time_millis(datetime.now())
+            self.data_buffer.append(data)
+            self.meta_buffer.append(metadata)
+
+    def get_next(self):
+        if len(self.data_buffer) > 0:
+            return self.meta_buffer.popleft(), self.data_buffer.popleft()
+        return None, None
+
+    @staticmethod
+    def unix_time_millis(dt):
+        """formats timestamps as milliseconds-since-epoch (double-precision float, only requires 8 bytes)"""
+        unix_epoch = datetime.fromtimestamp(0, timezone.utc)
+
+        if dt.tzinfo is None:
+            # make dt offset-aware in UTC if it's naive
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            # convert to UTC if it's aware in a different timezone
+            dt = dt.astimezone(timezone.utc)
+        return (dt - unix_epoch).total_seconds() * 1000.0
