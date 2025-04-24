@@ -19,7 +19,7 @@ except ImportError:
 
 # custom classes for sensors:
 from sensor import Sensor
-from microphone import Microphone
+import blankSensor
 
 # logger class:
 from loguru import logger
@@ -33,55 +33,53 @@ self_dir = os.path.split(self_path)[0]
 
 
 with open(f"{self_dir}/../settings.yaml", "r") as settings_file:
-    data = list(yaml.load(settings_file, Loader=SafeLoader))
-
+    settings = yaml.load(settings_file, Loader=SafeLoader)
     # network params
-    ingest_host_IP = data[0]["ingestorSettings"]["ingestorIPAddress"]
-    ingest_listener_port = data[0]["ingestorSettings"]["ingestorListenerPort"]
-    ingest_jetson_port = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
+    ingest_ip = settings["ingestor"]["ip"]
+    ingest_listen_port = settings["ingestor"]["listen_port"]
+    jetson_ingest_comm_port = settings["jetson"]["ingest_comm_port"]
 
-    BMI_host_IP = data[2]["BMISettings"]["BMIIPAddress"]
-    BMI_listener_port = data[2]["BMISettings"]["BMIListenerPort"]
-    BMI_jetson_port = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
+    bmi_ip = settings["bmi"]["ip"]
+    bmi_listen_port = settings["bmi"]["listen_port"]
+    jetson_bmi_comm_port = settings["jetson"]["bmi_comm_port"]
 
     # microphone Settings
-    audio_num_chan = data[4]["audioSettings"]["channels"]
-    audio_rate = data[4]["audioSettings"]["rate"]
+    # audio_num_chan = data[4]["audioSettings"]["channels"]
 
-    format_str = data[4]["audioSettings"]["format"]
-
-    buf_len = data[3]["bufferSettings"]["bufferLength"]
-    framerate = data[3]["bufferSettings"]["framerate"]
+    # format_str = data[4]["audioSettings"]["format"]
 
     # Speaker Settings
-    speaker_amp = data[5]["speakerSettings"]["amplitude"]
-    speaker_block_size = data[5]["speakerSettings"]["blockSize"]
+    speaker_amp = settings["speaker"]["amplitude"]
+    speaker_block_size = settings["speaker"]["block_size"]
+    audio_rate = settings["audio"]["rate"]
+    buf_len = settings["buffer"]["buffer_length"]
+    framerate = settings["buffer"]["framerate"]
 
     settings_file.close()
 
+# intial parameters
+speaker_frequency = 0
+buf_size = buf_len * framerate
+
 # instantiate socket stream connections:
 sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock_ingest.setsockopt(
-    socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
-)  # do not wait so long after program terminates to close socket
-sock_ingest.connect(
-    (ingest_host_IP, ingest_listener_port)
-)  # client side should connect, server should bind
+sock_ingest.connect((ingest_ip, ingest_listen_port))
 logger.info("Connected to ingestor server.")
-logger.info(f"Listening on {ingest_host_IP}:{ingest_listener_port}...")
+logger.info(f"Listening on {ingest_ip}:{ingest_listen_port}...")
 
-sock_BMI = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock_BMI.setsockopt(
-    socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
-)  # So the system does not wait so long after the program terminates to close the socket
-sock_BMI.connect(
-    (BMI_host_IP, BMI_listener_port)
-)  # client side should connect, server should bind
-logger.info("Connected to BMI server.")
-logger.info(f"Listening on {BMI_host_IP}:{BMI_listener_port}...")
+# NOTE: add in when BMI is connected otherwise throws conn error
+# sock_bmi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# sock_bmi.connect((bmi_ip, bmi_listen_port))
+# logger.info("Connected to ingestor server.")
+# logger.info(f"Listening on {bmi_ip}:{bmi_listen_port}...")
+
 
 # define sensor objects (2 optical, 2 camera, microphone, speaker, placeholders)
-mic = Microphone(buf_len * framerate, audio_rate, audio_num_chan, format_str, framerate)
+# mic = Microphone(buf_len * framerate, audio_rate, audio_num_chan, format_str, framerate)
+lick_sensor = blankSensor.blankSensor(buf_size, framerate)
+blank_sensor_one = blankSensor.blankSensor(buf_size, framerate)
+blank_sensor_two = blankSensor.blankSensor(buf_size, framerate)
+blank_sensor_three = blankSensor.blankSensor(buf_size, framerate)
 
 # NOTE: I2C addresses should be verified with the following shell command:
 #    `i2cdetect -y -r 7`
@@ -97,10 +95,7 @@ for sensor in sensor_manifest():
     sensor.begin()
 
 # thread-global flag for signaling receipt of an external termination signal:
-termFlag = False
-
-# intial parameters
-speaker_frequency = 0
+term_flag = threading.Event()
 
 
 def recv_all(sock, size):
@@ -117,7 +112,7 @@ def recv_all(sock, size):
 # Uses sounddevice outputstream because alsaaudio pcm write was having issues
 # with discontinuites creating weird harmonics, causing distorted sound.
 # This allows constant audio stream and also phase shift of the waveform.
-def audio_callback(outdata, frames, time, status):
+def audio_callback(outdata, frames):
     global speaker_frequency
     t = (np.arange(frames) + audio_callback.phase) / audio_rate
     wave = speaker_amp * np.sin(2 * np.pi * speaker_frequency * t)
@@ -126,6 +121,37 @@ def audio_callback(outdata, frames, time, status):
 
 
 audio_callback.phase = 0  # Initial phase
+
+reconnect_timer = 60
+# This function is called in case of a broken tcp connection between the jetson and another computer
+# It tries to re-establish the connection for up to 60 seconds
+def reconnect_to_ingestor():
+    start_time = time.time()
+    while(time.time() - start_time < reconnect_timer):
+        try:
+            ingestSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            ingestSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
+            ingestSocket.bind((ingest_ip, jetson_ingest_comm_port))
+            ingestSocket.connect((ingest_ip, ingest_listen_port))
+        except(BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(f"In jetsonCode.reconnectToIngestor() -- Connection lost: {e}, retrying connection!")
+            time.sleep(1)
+    print("In jetsonCode -- Connected to ingestor!")
+
+
+def reconnect_to_BMI():
+    start_time = time.time()
+
+    while(time.time() - start_time < reconnect_timer):
+        try:
+            BMISocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            BMISocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
+            BMISocket.bind((bmi_ip, jetson_bmi_comm_port))
+            BMISocket.connect((bmi_ip, bmi_listen_port))
+        except(BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(f"In jetsonCode.reconnectToBMI() -- Connection lost: {e}, retrying connection!")
+            time.sleep(1)
+    print("In jetsonCode -- Connected to BMI!")
 
 
 def pack_motion_data(metadata: float, motion_data, sensor_idx: int):
@@ -140,72 +166,66 @@ def pack_motion_data(metadata: float, motion_data, sensor_idx: int):
     )
 
 
-def pack_audio_data(audio_metadata, sent_time, audio_data, frame_num):
-    """serialization helper - marshals data into predefined binary struct"""
-    return struct.pack(
-        ">I3d",
-        audio_metadata,
-        Microphone.unix_time_millis(sent_time),
-        audio_data,
-        frame_num,
-    )
+# def pack_audio_data(audio_metadata: float, sent_time: float, audio_data, frame_num: int):
+#     """serialization helper - marshals data into predefined binary struct"""
+#     return struct.pack(
+#         ">I2d",
+#         audio_metadata,
+#         mic.unix_time_millis(sent_time),
+#         frame_num,
+#     ) + audio_data
 
 
 def data_enqueue_task():
     """thread task that pushes sensor data into deque buffers"""
-    while not termFlag:
-        for sensor in sensor_manifest():
+    while not term_flag.is_set():
+        for sensor in sensor_manifest:
             sensor.poll_data()
-        mic.append_mic_data()
+        # mic.append_mic_data()
 
 
 def data_transmit_task():
     """thread task that pops sensor data from deque buffers and transmits via socket"""
-    transmissionComplete = False
-    while not transmissionComplete:
-        if not termFlag:
-            audio_metadata, audio_data = Microphone.pop_mic_data()
-            if audio_data is not None:
-                audio_packet = pack_audio_data(audio_metadata, audio_data)
+    transmission_complete = False
+    while not transmission_complete:
+        if not term_flag.is_set():
             for idx, sensor in enumerate(sensor_manifest):
                 metadata, data = sensor.get_next()
                 if data is not None:
                     packet = pack_motion_data(metadata, data, idx)
                     try:
-                        sock_ingest.sendall(packet + audio_packet)
+                        sock_ingest.sendall(packet)
                     except Exception as e:
                         logger.error(
                             f"Error sending packet with timestamp `{metadata}`: {e}"
                         )
-                elif termFlag:
+                else:
                     logger.info("No data left, sending stop signal.")
                     try:
                         sock_ingest.sendall(b"END_STOP")
-                        transmissionComplete = True
+                        transmission_complete = True
                     except Exception as e:
                         logger.error(f"Error sending stop signal: {e}")
                     break
     logger.debug("data transmit thread lifecycle complete, closing socket")
 
     sock_ingest.close()
-    sock_BMI.close()
+    # sock_bmi.close()
 
 
 def term_listener_task():
     """thread task that listens for external termination signal"""
-    global termFlag
     global speaker_frequency
     logger.info("Listening for termination signal.")
-    stopMessage = recv_all(sock_BMI, 10)
-    if stopMessage and stopMessage.startswith(b"BEGIN_STOP"):
+    stop_msg = recv_all(sock_bmi, 10)
+    if stop_msg and stop_msg.startswith(b"BEGIN_STOP"):
         logger.info("Received termination signal.")
-        termFlag = True
+        term_flag.is_set(True)
     else:
-        speaker_frequency = struct.unpack(">f", stopMessage[:4])[0]
+        speaker_frequency = struct.unpack(">f", stop_msg[:4])[0]
 
 
 def speaker_playback():
-    global termFlag
 
     with sd.OutputStream(
         callback=audio_callback,
@@ -213,7 +233,7 @@ def speaker_playback():
         blocksize=speaker_block_size,
         channels=1,
     ):
-        while not termFlag:
+        while term_flag.is_set(False):
             time.sleep(0.1)
 
 
