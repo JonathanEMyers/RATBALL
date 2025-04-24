@@ -20,8 +20,8 @@ try:
 except ImportError:
     from yaml import SafeLoader
 
-with open(f"{parent_dir}/settings.yaml", "r") as settingsFile:
-    data = list(yaml.load(settingsFile, Loader=SafeLoader))
+with open(f"{parent_dir}/settings.yaml", "r") as settings_file:
+    data = list(yaml.load(settings_file, Loader=SafeLoader))
 
     # network params
     ingestHostIP = data[0]["ingestorSettings"]["ingestorIPAddress"]
@@ -32,7 +32,7 @@ with open(f"{parent_dir}/settings.yaml", "r") as settingsFile:
     #    BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
     #    BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
 
-    settingsFile.close()
+    settings_file.close()
 
 # instantiate socket stream connections:
 sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

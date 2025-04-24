@@ -32,7 +32,7 @@ self_path = os.path.abspath(__file__)
 self_dir = os.path.split(self_path)[0]
 
 
-with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
+with open(f"{self_dir}/../settings.yaml", "r") as settings_file:
     data = list(yaml.load(settings_file, Loader=SafeLoader))
 
     # network params
