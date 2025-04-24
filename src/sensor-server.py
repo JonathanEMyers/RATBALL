@@ -13,14 +13,14 @@ logger.add(
 
 self_path = os.path.abspath(__file__)
 self_dir = os.path.split(self_path)[0]
-
+parent_dir = os.path.abspath(os.path.join(self_dir, '..'))
 
 try:
     from yaml import CSafeLoader as SafeLoader
 except ImportError:
     from yaml import SafeLoader
 
-with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
+with open(f"{parent_dir}/settings.yaml", "r") as settingsFile:
     data = list(yaml.load(settingsFile, Loader=SafeLoader))
 
     # network params
@@ -83,8 +83,8 @@ def data_receiver_task():
     global terminationFlag
 
     # open output file descriptors for writing:
-    with open(f"{self_dir}/../output/sensor1.csv", "w") as fSensor1, open(
-        f"{self_dir}/../output/sensor2.csv", "w"
+    with open(f"{parent_dir}/output/sensor1.csv", "w") as fSensor1, open(
+        f"{parent_dir}/output/sensor2.csv", "w"
     ) as fSensor2:
         logger.info("Opened sensor data files!")
 
