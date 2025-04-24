@@ -5,13 +5,6 @@ import socket
 import sys
 import os
 
-# logger class:
-from loguru import logger
-logger.add(sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>")
-
-self_path = os.path.abspath(__file__)
-self_dir = os.path.split(self_path)[0]
-
 # custom sensor class for OTOS sensors:
 from sensor import Sensor
 
@@ -22,6 +15,14 @@ try:
     from yaml import CSafeLoader as SafeLoader
 except ImportError:
     from yaml import SafeLoader
+
+# logger class:
+from loguru import logger
+logger.add(sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>")
+
+self_path = os.path.abspath(__file__)
+self_dir = os.path.split(self_path)[0]
+
 
 with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
     data = list(yaml.load(settingsFile, Loader=SafeLoader))
