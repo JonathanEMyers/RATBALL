@@ -1,8 +1,9 @@
 # Python stdlib:
-import struct
 import threading
+import struct
 import socket
 import time
+import sys
 import os
 
 import numpy as np
