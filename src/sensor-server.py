@@ -24,24 +24,25 @@ with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
     # network params
     ingestHostIP = data[0]["ingestorSettings"]["ingestorIPAddress"]
     ingestListenerPort = data[0]["ingestorSettings"]["ingestorListenerPort"]
-    ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
-
-    BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
-    BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
-    BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
+#    ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
+#
+#    BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
+#    BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
+#    BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
 
     settingsFile.close()
 
 # instantiate socket stream connections:
 sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock_ingest.connect((ingestHostIP, ingestListenerPort))
+sock_ingest.bind((ingestHostIP, ingestListenerPort))
+sock_ingest.listen()
 logger.info("Connected to ingestor server.")
 logger.info(f"Listening on {ingestHostIP}:{ingestListenerPort}...")
 
-sock_BMI = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock_BMI.connect((BMIHostIP, BMIListenerPort))
-logger.info("Connected to BMI server.")
-logger.info(f"Listening on {BMIHostIP}:{BMIListenerPort}...")
+# sock_BMI = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# sock_BMI.bind((BMIHostIP, BMIListenerPort))
+# logger.info("Connected to BMI server.")
+# logger.info(f"Listening on {BMIHostIP}:{BMIListenerPort}...")
 
 # Flags to begin and end stopping program
 terminationFlag = False
@@ -52,8 +53,8 @@ conn, addr = sock_ingest.accept()
 logger.info(f"Connected to sensor client via {addr}")
 
 # accept connection to stop program client:
-conn2, addr2 = sock_BMI.accept()
-logger.info(f"Connected to stop client via {addr2}")
+# conn2, addr2 = sock_BMI.accept()
+# logger.info(f"Connected to stop client via {addr2}")
 
 
 def format_output(unmarshaled_data):
@@ -113,8 +114,8 @@ def data_receiver_task():
 
     # close all connections:
     conn.close()
-    conn2.close()
-    s.close()
+    #conn2.close()
+    sock_ingest.close()
     logger.info("Server shut down.")
 
 
@@ -122,7 +123,7 @@ def term_signalling_task():
     """thread task that forwards an external termination signal"""
     while True:
         try:
-            stopSignal = conn2.recv(10)
+            # stopSignal = conn2.recv(10)
             if stopSignal:
                 logger.info("Stop signal received, forwarding to sensor client...")
                 conn.sendall(stopSignal)

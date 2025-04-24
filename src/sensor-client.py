@@ -30,7 +30,7 @@ with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
     # network params
     ingestHostIP = data[0]["ingestorSettings"]["ingestorIPAddress"]
     ingestListenerPort = data[0]["ingestorSettings"]["ingestorListenerPort"]
-    ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
+    # ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
 
     # BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
     # BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]

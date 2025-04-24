@@ -12,8 +12,9 @@ ingestPort = 36785
 ingestSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ingestSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 ingestSocket.bind(("127.0.0.1", ingestPort))
-ingestSocket.connect((ingestHostIP, ingestListenerPort))
-logger.log("Connected to mock ingestor")
+ingestSocket.listen()
+#ingestSocket.connect((ingestHostIP, ingestListenerPort))
+logger.debug("Connected to mock ingestor")
 
 # Defining Peer-to-Peer Server Parameters
 jetsonHostIP = "127.0.0.1"
