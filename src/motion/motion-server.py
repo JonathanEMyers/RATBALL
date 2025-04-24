@@ -3,11 +3,11 @@ import threading
 import struct
 from logger import Logger
 
-logger = Logger('OpticalSensorServer', 3)
+logger = Logger("OpticalSensorServer", 3)
 
 
 # network params (TODO: read from yaml conf)
-HOST = '127.0.0.1'
+HOST = "127.0.0.1"
 PORT = 36783
 
 # Flags to begin and end stopping program
@@ -62,10 +62,10 @@ def data_receiver_task():
         while not endStop:
             # Receiving entire packet
             packet = recv_all(conn, 36)
-            #logger.log(f'packet: {struct.unpack(">4d", packet)}')
+            # logger.log(f'packet: {struct.unpack(">4d", packet)}')
             if packet is None:
                 pass
-            elif packet[:8] == b'END_STOP':
+            elif packet[:8] == b"END_STOP":
                 logger.info("Received endStop trigger")
                 endStop = True
             else:
@@ -75,14 +75,16 @@ def data_receiver_task():
                 sensor_change = current_sensor != sensor_idx
                 current_sensor = sensor_idx
                 if sensor_change:
-                    logger.debug(f'Now receiving data for sensor ID {current_sensor}')
+                    logger.debug(f"Now receiving data for sensor ID {current_sensor}")
                 if current_sensor == 0:
                     fSensor1.write(format_output(unpacked))
                 elif current_sensor == 1:
                     fSensor2.write(format_output(unpacked))
                 else:
-                    logger.critical(f'Got invalid sensor ID: `{current_sensor}`, possible packet corruption')
-                    raise Exception('Invalid sensor ID')
+                    logger.critical(
+                        f"Got invalid sensor ID: `{current_sensor}`, possible packet corruption"
+                    )
+                    raise Exception("Invalid sensor ID")
 
     # close all connections:
     conn.close()
@@ -104,6 +106,7 @@ def term_signalling_task():
             logger.error("Error encountered while forwarding stop program flag")
             break
 
+
 # Start threads to handle each client
 sensorThread = threading.Thread(target=data_receiver_task, daemon=True)
 stoppingThread = threading.Thread(target=term_signalling_task, daemon=True)
@@ -113,4 +116,3 @@ stoppingThread.start()
 
 stoppingThread.join()
 sensorThread.join()
-

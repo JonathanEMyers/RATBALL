@@ -1,14 +1,16 @@
-import collections, time
+import collections
+import time
 import alsaaudio as aa
 from datetime import datetime, timezone
 import struct
 
+
 class Microphone:
     def __init__(self, bufSize, rate, channels, format_str, framerate, maxRetries=10):
         format_map = {
-            'S16_LE': aa.PCM_FORMAT_S16_LE,
-            'U8': aa.PCM_FORMAT_U8,
-            'S32_LE': aa.PCM_FORMAT_S32_LE
+            "S16_LE": aa.PCM_FORMAT_S16_LE,
+            "U8": aa.PCM_FORMAT_U8,
+            "S32_LE": aa.PCM_FORMAT_S32_LE,
             # add more as needed
         }
 
@@ -33,11 +35,11 @@ class Microphone:
                     channels=channels,
                     rate=rate,
                     format=self.format,
-                    periodsize=self.chunkSize
+                    periodsize=self.chunkSize,
                 )
                 break
             except aa.ALSAAudioError as e:
-                print(f"[Attempt {attempt+1}] ALSA not ready: {e}")
+                print(f"[Attempt {attempt + 1}] ALSA not ready: {e}")
                 time.sleep(1)
         else:
             raise RuntimeError("Failed to initialize ALSA PCM after multiple attempts.")
@@ -48,31 +50,31 @@ class Microphone:
     def append_mic_data(self, whichBuffer):
         length, data = self.micInput.read()
         timestamp = self.unix_time_millis(datetime.now())
-        timestampPacked = struct.pack('d', timestamp)
+        timestampPacked = struct.pack("d", timestamp)
 
         if not length:
             return False
 
-        if(whichBuffer and len(self.dataBufferOne) < self.bufferSize):
+        if whichBuffer and len(self.dataBufferOne) < self.bufferSize:
             self.dataBufferOne.append(data)
             self.metaBufferOne.append(timestampPacked)
             self.frameCount += 1
-            return(True)
-        elif(not whichBuffer and len(self.dataBufferTwo) < self.bufferSize):
+            return True
+        elif not whichBuffer and len(self.dataBufferTwo) < self.bufferSize:
             self.dataBufferTwo.append(data)
             self.metaBufferTwo.append(timestampPacked)
             self.frameCount += 1
-            return(True)
+            return True
         else:
-            return(False)
+            return False
 
     def pop_mic_data(self, whichBuffer):
         if not whichBuffer and self.dataBufferOne:
-            return(self.metaBufferOne.popleft(), self.dataBufferOne.popleft())
+            return (self.metaBufferOne.popleft(), self.dataBufferOne.popleft())
         elif whichBuffer and self.dataBufferTwo:
-            return(self.metaBufferTwo.popleft(), self.dataBufferTwo.popleft())
+            return (self.metaBufferTwo.popleft(), self.dataBufferTwo.popleft())
         else:
-            return(None, None)
+            return (None, None)
 
     @staticmethod
     def unix_time_millis(dt):

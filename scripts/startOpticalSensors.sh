@@ -30,7 +30,7 @@ if [[ ! -d "$VENV_PATH" ]] ; then
 	$(which python3) -m venv .venv
 fi
 
-MOTION_TELEMETRY_DIR="$PROJECT_ROOT_PATH/src/motion"
+SRC_DIR="$PROJECT_ROOT_PATH/src"
 
 
 source "$VENV_PATH/bin/activate"
@@ -38,16 +38,16 @@ pip install -r './requirements.txt' > /dev/null 2>&1
 
 # Start the server in the background
 printf '%s\n\n' "Starting server..."
-python3 "$MOTION_TELEMETRY_DIR/motion-server.py" &
+python3 "$SRC_DIR/sensor-server.py" &
 SERVER_PID="$!"
 
 # Start the sensor data client in the background
 printf '%s\n\n' "Starting sensor data client..."
-python3 "$MOTION_TELEMETRY_DIR/motion-client.py" &
+python3 "$SRC_DIR/sensor-client.py" &
 SENSOR_PID="$!"
 
 # Start the stopping client (after some delay)
-python3 programStopClient.py &
+python3 "$SRC_DIR/terminator.py" &
 STOP_PID="$!"
 
 # Wait for stop client to finish

@@ -1,33 +1,33 @@
 # Python stdlib:
-import struct, threading, socket
+import struct
+import threading
+import socket
 
 # logger class:
-from logger import Logger
+from loguru import logger
 
 # custom sensor class for OTOS sensors:
 from sensor import Sensor
 
 # lib to read settings from .yaml file
 import yaml
+
 try:
     from yaml import CSafeLoader as SafeLoader
 except ImportError:
     from yaml import SafeLoader
 
-# instantiate logger object (supports log-level aware reporting):
-logger = Logger('OpticalSensorClient', 3)
-
-with open("setting.yaml", 'r') as settingsFile:
+with open("setting.yaml", "r") as settingsFile:
     data = list(yaml.load(settingsFile, Loader=SafeLoader))
 
     # network params
-    ingestHostIP = data[0]['ingestorSettings']['ingestorIPAddress']
-    ingestListenerPort = data[0]['ingestorSettings']['ingestorListenerPort']
-    ingestJetsonPort = data[1]['jetsonSettings']['ingestorJetsonCommPort']
+    ingestHostIP = data[0]["ingestorSettings"]["ingestorIPAddress"]
+    ingestListenerPort = data[0]["ingestorSettings"]["ingestorListenerPort"]
+    ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
 
     BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
-    BMIListenerPort = data[2]['BMISettings']['BMIListenerPort']
-    BMIJetsonPort = data[1]['jetsonSettings']["BMIJetsonCommPort"]
+    BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
+    BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
 
     settingsFile.close()
 
@@ -46,10 +46,7 @@ logger.info(f"Listening on {BMIHostIP}:{BMIListenerPort}...")
 #    `i2cdetect -y -r 7`
 # Both OTOS sensors have a fixed I2C address of `0x17`; to resolve address conflict,
 # one sensor's address is remapped using an LTC4316 (dedicated I2C address translation IC)
-sensor_manifest = [
-    Sensor(0x17),
-    Sensor(0x67)
-]
+sensor_manifest = [Sensor(0x17), Sensor(0x67)]
 
 # begin polling sensors:
 for sensor in sensor_manifest():
@@ -57,6 +54,7 @@ for sensor in sensor_manifest():
 
 # thread-global flag for signalling receipt of an external termination signal:
 termFlag = False
+
 
 def recv_all(sock, size):
     """socket helper - ensures that each packet is complete before transmit"""
@@ -68,18 +66,25 @@ def recv_all(sock, size):
         data += packet
     return data
 
+
 def pack_motion_data(metadata: float, motion_data, sensor_idx: int):
     """serialization helper - marshals data into predefined binary struct"""
     return struct.pack(
         ">4dI",
-        metadata, motion_data[0].x, motion_data[0].y, motion_data[0].h, sensor_idx
+        metadata,
+        motion_data[0].x,
+        motion_data[0].y,
+        motion_data[0].h,
+        sensor_idx,
     )
+
 
 def data_enqueue_task():
     """thread task that pushes sensor data into deque buffers"""
     while not termFlag:
         for sensor in sensor_manifest():
             sensor.poll_data()
+
 
 def data_transmit_task():
     """thread task that pops sensor data from deque buffers and transmits via socket"""
@@ -93,11 +98,13 @@ def data_transmit_task():
                     try:
                         s.sendall(packet)
                     except Exception as e:
-                        logger.error(f"Error sending packet with timestamp `{meta}`: {e}")
+                        logger.error(
+                            f"Error sending packet with timestamp `{meta}`: {e}"
+                        )
                 elif termFlag:
                     logger.info("No data left, sending stop signal.")
                     try:
-                        s.sendall(b'END_STOP')
+                        s.sendall(b"END_STOP")
                         transmissionComplete = True
                     except Exception as e:
                         logger.error(f"Error sending stop signal: {e}")
@@ -105,20 +112,30 @@ def data_transmit_task():
     logger.debug("data transmit thread lifecycle complete, closing socket")
     s.close()
 
+
 def term_listener_task():
     """thread task that listens for external termination signal"""
     global termFlag
     logger.info("Listening for termination signal.")
     stopMessage = recv_all(s, 10)
-    if stopMessage and stopMessage.startswith(b'BEGIN_STOP'):
+    if stopMessage and stopMessage.startswith(b"BEGIN_STOP"):
         logger.info("Received termination signal.")
         termFlag = True
 
+
 # set up and spawn thread pool:
 thread_pool = [
-    threading.Thread(name='optical-sensor-data-enq', target=data_enqueue_task,  daemon=True),
-    threading.Thread(name='optical-sensor-data-tx',  target=data_transmit_task, daemon=True),
-    threading.Thread(name='optical-sensor-term-lst', target=term_listener_task, daemon=True),
+    threading.Thread(
+        name="optical-sensor-data-enq", target=data_enqueue_task, daemon=True
+    ),
+    threading.Thread(
+        name="optical-sensor-data-tx", target=data_transmit_task, daemon=True
+    ),
+    threading.Thread(
+        name="optical-sensor-term-lst", target=term_listener_task, daemon=True
+    ),
 ]
-for t in thread_pool: t.start()
-for t in thread_pool: t.join()
+for t in thread_pool:
+    t.start()
+for t in thread_pool:
+    t.join()

@@ -1,8 +1,10 @@
 # Sparkfun libraries for OTOS sensor tx/rx:
 import qwiic_otos
+
 # Python stdlib:
-from collections import deque # for buffers
+from collections import deque  # for buffers
 from datetime import datetime, timezone
+
 
 class Sensor:
     BUF_SIZE = 36
@@ -14,7 +16,9 @@ class Sensor:
         self.meta_buffer = deque(maxlen=self.BUF_SIZE)
 
         if not self.device.is_connected():
-            raise ConnectionError(f"Sensor at address {hex(self.address)} not connected.")
+            raise ConnectionError(
+                f"Sensor at address {hex(self.address)} not connected."
+            )
 
     def begin(self):
         self.device.begin()
