@@ -1,42 +1,41 @@
 # Import functions
 import alsaaudio as aa
-import sounddevice as sd
-import struct, threading, socket, time, collections, yaml, csv
-import numpy as np
+import struct
+import threading
+import socket
+import yaml
+import csv
 from yaml import SafeLoader
 from datetime import datetime, timezone
-import cv2
-import sys  # For getting size of datatypes
-import Microphone
 
 # Open settings file and gather all necessary variables
 settingsFilename = "settings.yaml"
 
-with open(settingsFilename, 'r') as settingsFile:
+with open(settingsFilename, "r") as settingsFile:
     data = list(yaml.load(settingsFile, Loader=SafeLoader))
-    
+
     # Network settings
-    ingestHostIP = data[0]['ingestorSettings']['ingestorIPAddress']
-    ingestListenerPort = data[0]['ingestorSettings']['ingestorListenerPort']
-    ingestJetsonPort = data[1]['jetsonSettings']['ingestorJetsonCommPort']
+    ingestHostIP = data[0]["ingestorSettings"]["ingestorIPAddress"]
+    ingestListenerPort = data[0]["ingestorSettings"]["ingestorListenerPort"]
+    ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
 
     BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
-    BMIListenerPort = data[2]['BMISettings']['BMIListenerPort']
-    BMIJetsonPort = data[1]['jetsonSettings']["BMIJetsonCommPort"]
+    BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
+    BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
 
     # Microphone Settings
-    audioNumChannels = data[4]['audioSettings']['channels']
-    audioRate = data[4]['audioSettings']['rate']
+    audioNumChannels = data[4]["audioSettings"]["channels"]
+    audioRate = data[4]["audioSettings"]["rate"]
 
-    if('S16_LE' in data[4]['audioSettings']['format']):
+    if "S16_LE" in data[4]["audioSettings"]["format"]:
         audioFormat = aa.PCM_FORMAT_S16_LE
-    
-    bufferLength = data[3]['bufferSettings']['bufferLength']
-    framerate = data[3]['bufferSettings']['framerate']
+
+    bufferLength = data[3]["bufferSettings"]["bufferLength"]
+    framerate = data[3]["bufferSettings"]["framerate"]
 
     # Speaker Settings
-    speakerAmplitude = data[5]['speakerSettings']['amplitude']
-    speakerBlockSize = data[5]['speakerSettings']['blockSize']
+    speakerAmplitude = data[5]["speakerSettings"]["amplitude"]
+    speakerBlockSize = data[5]["speakerSettings"]["blockSize"]
 
     settingsFile.close()
 
@@ -46,15 +45,17 @@ audioDataFilepath = "25_04_19_Audio.raw"
 audioMetaFilepath = "25_04_19_Audio.csv"
 
 
-metadataSize = 2 * 8 + 4       # UPDATE FOR EACH NEW PIECE OF DATA -- Known metadata size (in bytes) at transmission
-                                #   - Six timestamps, (8 bytes each), one for each:
-                                #       - One microphone
-                                #       - Four placeholder (blank) sensor channels
-                                #       - Time of transmission
-                                #   - One four-byte int
-                                #       - For the frame counter
+metadataSize = (
+    2 * 8 + 4
+)  # UPDATE FOR EACH NEW PIECE OF DATA -- Known metadata size (in bytes) at transmission
+#   - Six timestamps, (8 bytes each), one for each:
+#       - One microphone
+#       - Four placeholder (blank) sensor channels
+#       - Time of transmission
+#   - One four-byte int
+#       - For the frame counter
 
-dataSize = 2*audioChunkSize
+dataSize = 2 * audioChunkSize
 
 # Define flags
 beginTermination = False
@@ -76,11 +77,11 @@ jetsonConn, jetsonAddr = ingestorSocket.accept()
 print(f"In ingestorCode -- Jetson is connected by {jetsonAddr}")
 
 
-
 # Helper functions
 
+
 # Was encountering some issues where recv was running too fast,
-# and the metadata was getting decoded before it was ready, so this 
+# and the metadata was getting decoded before it was ready, so this
 # is here to ensure that all data is recieved before attempting to encode
 def recvAll(sock, size):
     data = b""
@@ -91,8 +92,11 @@ def recvAll(sock, size):
         data += packet
     return data
 
+
 # This is a function to determine the time since epoch
 unix_epoch = datetime.fromtimestamp(0, timezone.utc)
+
+
 def unix_time_millis(dt):
     """formats timestamps as milliseconds-since-epoch (double-precision float, only requires 8 bytes)"""
     if dt.tzinfo is None:
@@ -104,32 +108,33 @@ def unix_time_millis(dt):
     return (dt - unix_epoch).total_seconds() * 1000.0
 
 
-
-
 # Thread-associated functions
 def handleJetson():
     global beginTermination
     global endTermination
 
     # Open all necessary files (metadata files, audio file, sensor data file, etc.)
-    with open(audioDataFilepath, "wb") as fAudio, open(audioMetaFilepath, "w", newline='') as fAudioMeta:
+    with open(audioDataFilepath, "wb") as fAudio, open(
+        audioMetaFilepath, "w", newline=""
+    ) as fAudioMeta:
         audioWriter = csv.writer(fAudioMeta)
-        audioWriter.writerow(["Frame Count", "Reception Time", "Sent Time", "Taken time"])
+        audioWriter.writerow(
+            ["Frame Count", "Reception Time", "Sent Time", "Taken time"]
+        )
         print("In ingestorCode.handleJetson() -- Opened files!")
 
-        while(not endTermination):
+        while not endTermination:
             # Receive total packet
             totalPacket = recvAll(jetsonConn, metadataSize + dataSize)
-
 
             # Establish time of reception
             receptionTime = datetime.now()
             receptionTimeSinceEpoch = unix_time_millis(receptionTime)
 
-            if(totalPacket is None):
+            if totalPacket is None:
                 pass
 
-            elif(totalPacket[:8] == b'END_STOP'):
+            elif totalPacket[:8] == b"END_STOP":
                 endTermination = True
 
             else:
@@ -143,11 +148,10 @@ def handleJetson():
                 frameCount = struct.unpack(">I", frameCountPacked)[0]
 
                 timeSentPacked = metadata[4:12]
-                timeSent = struct.unpack('d', timeSentPacked)[0]
+                timeSent = struct.unpack("d", timeSentPacked)[0]
 
                 audioTimeTakenPacked = metadata[12:20]
-                audioTimeTaken = struct.unpack('d', audioTimeTakenPacked)[0]
-
+                audioTimeTaken = struct.unpack("d", audioTimeTakenPacked)[0]
 
                 # Splitting data into individual elements
                 #   - Same idea as the metadata splitting
@@ -161,14 +165,17 @@ def handleJetson():
                 # Reformat ODOM data and append it to file
 
                 # Reformat audio metadata and append it to file
-                audioWriter.writerow([frameCount, receptionTimeSinceEpoch, timeSent, audioTimeTaken])
+                audioWriter.writerow(
+                    [frameCount, receptionTimeSinceEpoch, timeSent, audioTimeTaken]
+                )
                 # print(f"{frameCount},{receptionTime},{audioTimeTaken}")
-                # Reformat audio data and append it to file 
+                # Reformat audio data and append it to file
                 fAudio.write(data)
 
-
     # Transmission is finished, close all openings
-    print("In ingestorCode.handleJetson() -- Received endTermination trigger, shutting down!")
+    print(
+        "In ingestorCode.handleJetson() -- Received endTermination trigger, shutting down!"
+    )
     jetsonConn.close()
     BMIConn.close()
     ingestorSocket.close()
