@@ -13,7 +13,7 @@ ingestSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ingestSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 ingestSocket.bind(("127.0.0.1", ingestPort))
 ingestSocket.listen()
-#ingestSocket.connect((ingestHostIP, ingestListenerPort))
+# ingestSocket.connect((ingestHostIP, ingestListenerPort))
 logger.debug("Connected to mock ingestor")
 
 # Defining Peer-to-Peer Server Parameters

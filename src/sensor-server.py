@@ -7,7 +7,9 @@ from loguru import logger
 
 import yaml
 
-logger.add(sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>")
+logger.add(
+    sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>"
+)
 
 self_path = os.path.abspath(__file__)
 self_dir = os.path.split(self_path)[0]
@@ -24,11 +26,11 @@ with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
     # network params
     ingestHostIP = data[0]["ingestorSettings"]["ingestorIPAddress"]
     ingestListenerPort = data[0]["ingestorSettings"]["ingestorListenerPort"]
-#    ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
-#
-#    BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
-#    BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
-#    BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
+    #    ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
+    #
+    #    BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
+    #    BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
+    #    BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
 
     settingsFile.close()
 
@@ -81,7 +83,9 @@ def data_receiver_task():
     global terminationFlag
 
     # open output file descriptors for writing:
-    with open(f"{self_dir}/../output/sensor1.csv", "w") as fSensor1, open(f"{self_dir}/../output/sensor2.csv", "w") as fSensor2:
+    with open(f"{self_dir}/../output/sensor1.csv", "w") as fSensor1, open(
+        f"{self_dir}/../output/sensor2.csv", "w"
+    ) as fSensor2:
         logger.info("Opened sensor data files!")
 
         current_sensor = None
@@ -114,7 +118,7 @@ def data_receiver_task():
 
     # close all connections:
     conn.close()
-    #conn2.close()
+    # conn2.close()
     sock_ingest.close()
     logger.info("Server shut down.")
 

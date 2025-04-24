@@ -18,7 +18,10 @@ except ImportError:
 
 # logger class:
 from loguru import logger
-logger.add(sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>")
+
+logger.add(
+    sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>"
+)
 
 self_path = os.path.abspath(__file__)
 self_dir = os.path.split(self_path)[0]

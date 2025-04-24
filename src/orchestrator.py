@@ -22,11 +22,13 @@ from microphone import Microphone
 
 # logger class:
 from loguru import logger
-logger.add(sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>")
+
+logger.add(
+    sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>"
+)
 
 self_path = os.path.abspath(__file__)
 self_dir = os.path.split(self_path)[0]
-
 
 
 with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
@@ -99,6 +101,7 @@ termFlag = False
 # intial parameters
 speaker_frequency = 0
 
+
 def recv_all(sock, size):
     """socket helper - ensures that each packet is complete before transmit"""
     data = b""
@@ -119,6 +122,8 @@ def audio_callback(outdata, frames, time, status):
     wave = speaker_amp * np.sin(2 * np.pi * speaker_frequency * t)
     outdata[:] = wave.reshape(-1, 1)
     audio_callback.phase += frames  # Keep track of phase
+
+
 audio_callback.phase = 0  # Initial phase
 
 
@@ -184,6 +189,7 @@ def data_transmit_task():
     sock_ingest.close()
     sock_BMI.close()
 
+
 def term_listener_task():
     """thread task that listens for external termination signal"""
     global termFlag
@@ -194,15 +200,20 @@ def term_listener_task():
         logger.info("Received termination signal.")
         termFlag = True
     else:
-        speaker_frequency = struct.unpack('>f', stopMessage[:4])[0]
+        speaker_frequency = struct.unpack(">f", stopMessage[:4])[0]
 
 
 def speaker_playback():
     global termFlag
 
-    with sd.OutputStream(callback=audio_callback, samplerate=audio_rate, blocksize=speaker_block_size, channels=1):
+    with sd.OutputStream(
+        callback=audio_callback,
+        samplerate=audio_rate,
+        blocksize=speaker_block_size,
+        channels=1,
+    ):
         while not termFlag:
-            time.sleep(.1)
+            time.sleep(0.1)
 
 
 # set up and spawn thread pool:
@@ -216,9 +227,7 @@ thread_pool = [
     threading.Thread(
         name="optical-sensor-term-lst", target=term_listener_task, daemon=True
     ),
-    threading.Thread(
-        name="speaker-playback", target=speaker_playback, daemon=True
-    ),
+    threading.Thread(name="speaker-playback", target=speaker_playback, daemon=True),
 ]
 for t in thread_pool:
     t.start()
