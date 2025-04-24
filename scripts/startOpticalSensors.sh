@@ -25,16 +25,16 @@ cleanup_on_exit() {
 trap cleanup_on_exit INT
 
 
-VENV_PATH="$PROJECT_ROOT_PATH/.venv"
-if [[ ! -d "$VENV_PATH" ]] ; then 
-	$(which python3) -m venv .venv
-fi
+# VENV_PATH="$PROJECT_ROOT_PATH/.venv"
+# if [[ ! -d "$VENV_PATH" ]] ; then 
+# 	$(which python3) -m venv .venv
+# fi
 
 SRC_DIR="$PROJECT_ROOT_PATH/src"
 
 
-source "$VENV_PATH/bin/activate"
-pip install -r './requirements.txt' > /dev/null 2>&1 
+# source "$VENV_PATH/bin/activate"
+# pip install -r './requirements.txt' > /dev/null 2>&1 
 
 # Start the server in the background
 printf '%s\n\n' "Starting server..."

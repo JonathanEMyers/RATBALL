@@ -2,9 +2,15 @@
 import struct
 import threading
 import socket
+import sys
+import os
 
 # logger class:
 from loguru import logger
+logger.add(sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>")
+
+self_path = os.path.abspath(__file__)
+self_dir = os.path.split(self_path)[0]
 
 # custom sensor class for OTOS sensors:
 from sensor import Sensor
@@ -17,7 +23,7 @@ try:
 except ImportError:
     from yaml import SafeLoader
 
-with open("setting.yaml", "r") as settingsFile:
+with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
     data = list(yaml.load(settingsFile, Loader=SafeLoader))
 
     # network params
@@ -25,21 +31,22 @@ with open("setting.yaml", "r") as settingsFile:
     ingestListenerPort = data[0]["ingestorSettings"]["ingestorListenerPort"]
     ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
 
-    BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
-    BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
-    BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
+    # BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
+    # BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
+    # BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
 
     settingsFile.close()
 
 # instantiate socket stream connections:
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect((ingestHostIP, ingestListenerPort))
+sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock_ingest.connect((ingestHostIP, ingestListenerPort))
 logger.info("Connected to ingestor server.")
 logger.info(f"Listening on {ingestHostIP}:{ingestListenerPort}...")
 
-s.connect((BMIHostIP, BMIListenerPort))
-logger.info("Connected to BMI server.")
-logger.info(f"Listening on {BMIHostIP}:{BMIListenerPort}...")
+# sock_BMI = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# sock_BMI.connect((BMIHostIP, BMIListenerPort))
+# logger.info("Connected to BMI server.")
+# logger.info(f"Listening on {BMIHostIP}:{BMIListenerPort}...")
 
 
 # NOTE: I2C addresses should be verified with the following shell command:
@@ -96,21 +103,21 @@ def data_transmit_task():
                 if data is not None:
                     packet = pack_motion_data(metadata, data, idx)
                     try:
-                        s.sendall(packet)
+                        sock_ingest.sendall(packet)
                     except Exception as e:
                         logger.error(
-                            f"Error sending packet with timestamp `{meta}`: {e}"
+                            f"Error sending packet with timestamp `{metadata}`: {e}"
                         )
                 elif termFlag:
                     logger.info("No data left, sending stop signal.")
                     try:
-                        s.sendall(b"END_STOP")
+                        sock_ingest.sendall(b"END_STOP")
                         transmissionComplete = True
                     except Exception as e:
                         logger.error(f"Error sending stop signal: {e}")
                     break
     logger.debug("data transmit thread lifecycle complete, closing socket")
-    s.close()
+    sock_ingest.close()
 
 
 def term_listener_task():

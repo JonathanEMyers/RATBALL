@@ -1,16 +1,24 @@
 import socket
 import threading
 import struct
+import sys
+import os
 from loguru import logger
 
 import yaml
+
+logger.add(sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>")
+
+self_path = os.path.abspath(__file__)
+self_dir = os.path.split(self_path)[0]
+
 
 try:
     from yaml import CSafeLoader as SafeLoader
 except ImportError:
     from yaml import SafeLoader
 
-with open("setting.yaml", "r") as settingsFile:
+with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
     data = list(yaml.load(settingsFile, Loader=SafeLoader))
 
     # network params
@@ -25,26 +33,26 @@ with open("setting.yaml", "r") as settingsFile:
     settingsFile.close()
 
 # instantiate socket stream connections:
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect((ingestHostIP, ingestListenerPort))
+sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock_ingest.connect((ingestHostIP, ingestListenerPort))
 logger.info("Connected to ingestor server.")
 logger.info(f"Listening on {ingestHostIP}:{ingestListenerPort}...")
 
-s.connect((BMIHostIP, BMIListenerPort))
+sock_BMI = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock_BMI.connect((BMIHostIP, BMIListenerPort))
 logger.info("Connected to BMI server.")
 logger.info(f"Listening on {BMIHostIP}:{BMIListenerPort}...")
 
 # Flags to begin and end stopping program
-beginStop = False
-endStop = False
+terminationFlag = False
 
 # TODO: refactor to be call order independent
 # accept connection from sensor client:
-conn, addr = s.accept()
+conn, addr = sock_ingest.accept()
 logger.info(f"Connected to sensor client via {addr}")
 
 # accept connection to stop program client:
-conn2, addr2 = s.accept()
+conn2, addr2 = sock_BMI.accept()
 logger.info(f"Connected to stop client via {addr2}")
 
 
@@ -69,22 +77,22 @@ def recv_all(sock, size):
 
 def data_receiver_task():
     """thread task that receives sensor data and writes it to files in CSV format"""
-    global endStop
+    global terminationFlag
 
     # open output file descriptors for writing:
-    with open("sensor1.csv", "w") as fSensor1, open("sensor2.csv", "w") as fSensor2:
+    with open(f"{self_dir}/../output/sensor1.csv", "w") as fSensor1, open(f"{self_dir}/../output/sensor2.csv", "w") as fSensor2:
         logger.info("Opened sensor data files!")
 
         current_sensor = None
-        while not endStop:
+        while not terminationFlag:
             # Receiving entire packet
             packet = recv_all(conn, 36)
             # logger.log(f'packet: {struct.unpack(">4d", packet)}')
             if packet is None:
                 pass
             elif packet[:8] == b"END_STOP":
-                logger.info("Received endStop trigger")
-                endStop = True
+                logger.info("Received terminationFlag trigger")
+                terminationFlag = True
             else:
                 # Splitting packet into metadata and sensor data
                 unpacked = struct.unpack(">4dI", packet)

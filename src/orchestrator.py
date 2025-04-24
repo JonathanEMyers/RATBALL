@@ -2,15 +2,11 @@
 import struct
 import threading
 import socket
+import time
+import os
 
-# logger class:
-from loguru import logger
-
-# custom sensor class for OTOS sensors:
-from sensor import Sensor
-
-# custom microphone class
-import Microphone
+import numpy as np
+import sounddevice as sd
 
 # lib to read settings from .yaml file:
 import yaml
@@ -20,10 +16,20 @@ try:
 except ImportError:
     from yaml import SafeLoader
 
-# instantiate logger object (supports log-level aware reporting):
-# logger = Logger('OpticalSensorClient', 3)
+# custom classes for sensors:
+from sensor import Sensor
+from microphone import Microphone
 
-with open("setting.yaml", "r") as settings_file:
+# logger class:
+from loguru import logger
+logger.add(sys.stdout, colorize=True, format="<green>{time}</green> <level>{message}</level>")
+
+self_path = os.path.abspath(__file__)
+self_dir = os.path.split(self_path)[0]
+
+
+
+with open(f"{self_dir}/../settings.yaml", "r") as settingsFile:
     data = list(yaml.load(settings_file, Loader=SafeLoader))
 
     # network params
@@ -51,21 +57,21 @@ with open("setting.yaml", "r") as settings_file:
     settings_file.close()
 
 # instantiate socket stream connections:
-i = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-i.setsockopt(
+sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock_ingest.setsockopt(
     socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
 )  # do not wait so long after program terminates to close socket
-i.connect(
+sock_ingest.connect(
     (ingest_host_IP, ingest_listener_port)
 )  # client side should connect, server should bind
 logger.info("Connected to ingestor server.")
 logger.info(f"Listening on {ingest_host_IP}:{ingest_listener_port}...")
 
-b = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-b.setsockopt(
+sock_BMI = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock_BMI.setsockopt(
     socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
 )  # So the system does not wait so long after the program terminates to close the socket
-b.connect(
+sock_BMI.connect(
     (BMI_host_IP, BMI_listener_port)
 )  # client side should connect, server should bind
 logger.info("Connected to BMI server.")
@@ -90,6 +96,8 @@ for sensor in sensor_manifest():
 # thread-global flag for signaling receipt of an external termination signal:
 termFlag = False
 
+# intial parameters
+speaker_frequency = 0
 
 def recv_all(sock, size):
     """socket helper - ensures that each packet is complete before transmit"""
@@ -100,6 +108,18 @@ def recv_all(sock, size):
             return None
         data += packet
     return data
+
+
+# Uses sounddevice outputstream because alsaaudio pcm write was having issues
+# with discontinuites creating weird harmonics, causing distorted sound.
+# This allows constant audio stream and also phase shift of the waveform.
+def audio_callback(outdata, frames, time, status):
+    global speaker_frequency
+    t = (np.arange(frames) + audio_callback.phase) / audio_rate
+    wave = speaker_amp * np.sin(2 * np.pi * speaker_frequency * t)
+    outdata[:] = wave.reshape(-1, 1)
+    audio_callback.phase += frames  # Keep track of phase
+audio_callback.phase = 0  # Initial phase
 
 
 def pack_motion_data(metadata: float, motion_data, sensor_idx: int):
@@ -115,10 +135,11 @@ def pack_motion_data(metadata: float, motion_data, sensor_idx: int):
 
 
 def pack_audio_data(audio_metadata, sent_time, audio_data, frame_num):
+    """serialization helper - marshals data into predefined binary struct"""
     return struct.pack(
         ">I3d",
         audio_metadata,
-        unix_time_millis(sent_time),
+        Microphone.unix_time_millis(sent_time),
         audio_data,
         frame_num,
     )
@@ -137,38 +158,51 @@ def data_transmit_task():
     transmissionComplete = False
     while not transmissionComplete:
         if not termFlag:
+            audio_metadata, audio_data = Microphone.pop_mic_data()
+            if audio_data is not None:
+                audio_packet = pack_audio_data(audio_metadata, audio_data)
             for idx, sensor in enumerate(sensor_manifest):
                 metadata, data = sensor.get_next()
                 if data is not None:
                     packet = pack_motion_data(metadata, data, idx)
                     try:
-                        s.sendall(packet)
+                        sock_ingest.sendall(packet + audio_packet)
                     except Exception as e:
                         logger.error(
-                            f"Error sending packet with timestamp `{meta}`: {e}"
+                            f"Error sending packet with timestamp `{metadata}`: {e}"
                         )
                 elif termFlag:
                     logger.info("No data left, sending stop signal.")
                     try:
-                        s.sendall(b"END_STOP")
+                        sock_ingest.sendall(b"END_STOP")
                         transmissionComplete = True
                     except Exception as e:
                         logger.error(f"Error sending stop signal: {e}")
                     break
     logger.debug("data transmit thread lifecycle complete, closing socket")
 
-    i.close()
-    b.close()
-
+    sock_ingest.close()
+    sock_BMI.close()
 
 def term_listener_task():
     """thread task that listens for external termination signal"""
     global termFlag
+    global speaker_frequency
     logger.info("Listening for termination signal.")
-    stopMessage = recv_all(s, 10)
+    stopMessage = recv_all(sock_BMI, 10)
     if stopMessage and stopMessage.startswith(b"BEGIN_STOP"):
         logger.info("Received termination signal.")
         termFlag = True
+    else:
+        speaker_frequency = struct.unpack('>f', stopMessage[:4])[0]
+
+
+def speaker_playback():
+    global termFlag
+
+    with sd.OutputStream(callback=audio_callback, samplerate=audio_rate, blocksize=speaker_block_size, channels=1):
+        while not termFlag:
+            time.sleep(.1)
 
 
 # set up and spawn thread pool:
@@ -181,6 +215,9 @@ thread_pool = [
     ),
     threading.Thread(
         name="optical-sensor-term-lst", target=term_listener_task, daemon=True
+    ),
+    threading.Thread(
+        name="speaker-playback", target=speaker_playback, daemon=True
     ),
 ]
 for t in thread_pool:
