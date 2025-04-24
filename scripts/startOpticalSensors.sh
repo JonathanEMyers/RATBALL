@@ -36,7 +36,7 @@ uv sync
 
 SRC_DIR="$PROJECT_ROOT_PATH/src"
 
-export LOGURU_LEVEL=CRITICAL
+export LOGURU_LEVEL="${RATBALL_LOG_LEVEL:-CRITICAL}"
 
 # Start the server in the background
 printf '%s\n\n' "Starting server..."
