@@ -17,3 +17,7 @@ dependencies = [
 dev = [
     "ruff>=0.11.6",
 ]
+
+[tool.uv.sources]
+sparkfun-qwiic-otos = { git = "https://github.com/sparkfun/qwiic_otos_py.git" }
+sparkfun-qwiic-i2c = { git = "https://github.com/sparkfun/Qwiic_I2C_Py.git" }

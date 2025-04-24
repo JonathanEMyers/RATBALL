@@ -273,8 +273,8 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24.4" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ruff", specifier = "==0.11.6" },
-    { name = "sparkfun-qwiic-i2c", specifier = ">=2.0.0" },
-    { name = "sparkfun-qwiic-otos", specifier = ">=2.0.0" },
+    { name = "sparkfun-qwiic-i2c", git = "https://github.com/sparkfun/Qwiic_I2C_Py.git" },
+    { name = "sparkfun-qwiic-otos", git = "https://github.com/sparkfun/qwiic_otos_py.git" },
 ]
 
 [package.metadata.requires-dev]
@@ -317,25 +317,17 @@ wheels = [
 [[package]]
 name = "sparkfun-qwiic-i2c"
 version = "2.0.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/sparkfun/Qwiic_I2C_Py.git#670c3c02b8fb1357918bc5a9d7b25805b1ad29e8" }
 dependencies = [
     { name = "smbus2" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/48/60/7d7cc46d29e92777f0f1c19ec5880f963e25224e41c232ad82a74778855f/sparkfun_qwiic_i2c-2.0.0.tar.gz", hash = "sha256:1e9567815c1c7a4c03fac0d9ca01a24b7deb1368d319b014daa45d965829fab6", size = 11811, upload_time = "2025-03-12T21:20:07.837Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/69/aeaea26f8e614117e8d8658bf26bb7d1612e6418fc0a315fde2452c015f6/sparkfun_qwiic_i2c-2.0.0-py3-none-any.whl", hash = "sha256:75a8f0353fbd3208780f9c0a71cc87d050c7853538d0a7198121b318c0d2ecd5", size = 16041, upload_time = "2025-03-12T21:20:06.593Z" },
 ]
 
 [[package]]
 name = "sparkfun-qwiic-otos"
 version = "2.0.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/sparkfun/qwiic_otos_py.git#dcd21356f0e130a23c3444ba924900aa494c31a2" }
 dependencies = [
     { name = "sparkfun-qwiic-i2c" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/31/7f/90ed884888a39dd9488ad44853607ab49129ba0921af0f94741bd416c8f6/sparkfun_qwiic_otos-2.0.0.tar.gz", hash = "sha256:633c96c348b1fd8c9a45f02d56f434b6834e33e4ec9a0ca6e8a9d4d754b6d734", size = 11341, upload_time = "2025-03-12T23:34:39.421Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/df/4e8c42cb9fbb4cc874f365b5acacd4150068cb95eb653f83332ab5cd6002/sparkfun_qwiic_otos-2.0.0-py3-none-any.whl", hash = "sha256:0bd52733afd0060248622b8950c65a863eac65b54b41f5c3925ce0bbc99df4d6", size = 9068, upload_time = "2025-03-12T23:34:38.134Z" },
 ]
 
 [[package]]
