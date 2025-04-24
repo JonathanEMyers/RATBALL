@@ -128,7 +128,7 @@ def term_listener_task():
     """thread task that listens for external termination signal"""
     global termFlag
     logger.info("Listening for termination signal.")
-    stopMessage = recv_all(s, 10)
+    stopMessage = recv_all(sock_ingest, 10)
     if stopMessage and stopMessage.startswith(b"BEGIN_STOP"):
         logger.info("Received termination signal.")
         termFlag = True
