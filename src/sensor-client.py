@@ -28,29 +28,18 @@ self_dir = os.path.split(self_path)[0]
 
 
 with open(f"{self_dir}/../settings.yaml", "r") as settings_file:
-    data = list(yaml.load(settings_file, Loader=SafeLoader))
-
+    settings = yaml.load(settings_file, Loader=SafeLoader)
     # network params
-    ingestHostIP = data[0]["ingestorSettings"]["ingestorIPAddress"]
-    ingestListenerPort = data[0]["ingestorSettings"]["ingestorListenerPort"]
-    # ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
-
-    # BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
-    # BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
-    # BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
+    ingest_ip = settings["ingestor"]["ip"]
+    ingest_listen_port = settings["ingestor"]["listen_port"]
 
     settings_file.close()
 
 # instantiate socket stream connections:
 sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock_ingest.connect((ingestHostIP, ingestListenerPort))
+sock_ingest.connect((ingest_ip, ingest_listen_port))
 logger.info("Connected to ingestor server.")
-logger.info(f"Listening on {ingestHostIP}:{ingestListenerPort}...")
-
-# sock_BMI = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# sock_BMI.connect((BMIHostIP, BMIListenerPort))
-# logger.info("Connected to BMI server.")
-# logger.info(f"Listening on {BMIHostIP}:{BMIListenerPort}...")
+logger.info(f"Listening on {ingest_ip}:{ingest_listen_port}...")
 
 
 # NOTE: I2C addresses should be verified with the following shell command:
@@ -64,7 +53,7 @@ for sensor in sensor_manifest:
     sensor.begin()
 
 # thread-global flag for signalling receipt of an external termination signal:
-termFlag = False
+term_flag = False
 
 
 def recv_all(sock, size):
@@ -92,16 +81,16 @@ def pack_motion_data(metadata: float, motion_data, sensor_idx: int):
 
 def data_enqueue_task():
     """thread task that pushes sensor data into deque buffers"""
-    while not termFlag:
+    while not term_flag:
         for sensor in sensor_manifest:
             sensor.poll_data()
 
 
 def data_transmit_task():
     """thread task that pops sensor data from deque buffers and transmits via socket"""
-    transmissionComplete = False
-    while not transmissionComplete:
-        if not termFlag:
+    transmission_complete = False
+    while not transmission_complete:
+        if not term_flag:
             for idx, sensor in enumerate(sensor_manifest):
                 metadata, data = sensor.get_next()
                 if data is not None:
@@ -112,11 +101,11 @@ def data_transmit_task():
                         logger.error(
                             f"Error sending packet with timestamp `{metadata}`: {e}"
                         )
-                elif termFlag:
+                elif term_flag:
                     logger.info("No data left, sending stop signal.")
                     try:
                         sock_ingest.sendall(b"END_STOP")
-                        transmissionComplete = True
+                        transmission_complete = True
                     except Exception as e:
                         logger.error(f"Error sending stop signal: {e}")
                     break
@@ -126,12 +115,12 @@ def data_transmit_task():
 
 def term_listener_task():
     """thread task that listens for external termination signal"""
-    global termFlag
+    global term_flag
     logger.info("Listening for termination signal.")
-    stopMessage = recv_all(sock_ingest, 10)
-    if stopMessage and stopMessage.startswith(b"BEGIN_STOP"):
+    stop_message = recv_all(sock_ingest, 10)
+    if stop_message and stop_message.startswith(b"BEGIN_STOP"):
         logger.info("Received termination signal.")
-        termFlag = True
+        term_flag = True
 
 
 # set up and spawn thread pool:

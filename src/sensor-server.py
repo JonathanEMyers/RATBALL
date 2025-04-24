@@ -21,25 +21,21 @@ except ImportError:
     from yaml import SafeLoader
 
 with open(f"{parent_dir}/settings.yaml", "r") as settings_file:
-    data = list(yaml.load(settings_file, Loader=SafeLoader))
+    settings = yaml.load(settings_file, Loader=SafeLoader)
 
     # network params
-    ingestHostIP = data[0]["ingestorSettings"]["ingestorIPAddress"]
-    ingestListenerPort = data[0]["ingestorSettings"]["ingestorListenerPort"]
-    #    ingestJetsonPort = data[1]["jetsonSettings"]["ingestorJetsonCommPort"]
-    #
-    #    BMIHostIP = data[2]["BMISettings"]["BMIIPAddress"]
-    #    BMIListenerPort = data[2]["BMISettings"]["BMIListenerPort"]
-    #    BMIJetsonPort = data[1]["jetsonSettings"]["BMIJetsonCommPort"]
+    ingest_ip = settings["ingestor"]["ip"]
+    ingest_listen_port = settings["ingestor"]["listen_port"]
 
+    output_path = settings["data_paths"]["sensor"]
     settings_file.close()
 
 # instantiate socket stream connections:
 sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock_ingest.bind((ingestHostIP, ingestListenerPort))
+sock_ingest.bind((ingest_ip, ingest_listen_port))
 sock_ingest.listen()
 logger.info("Connected to ingestor server.")
-logger.info(f"Listening on {ingestHostIP}:{ingestListenerPort}...")
+logger.info(f"Listening on {ingest_ip}:{ingest_listen_port}...")
 
 # sock_BMI = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # sock_BMI.bind((BMIHostIP, BMIListenerPort))
@@ -47,7 +43,7 @@ logger.info(f"Listening on {ingestHostIP}:{ingestListenerPort}...")
 # logger.info(f"Listening on {BMIHostIP}:{BMIListenerPort}...")
 
 # Flags to begin and end stopping program
-terminationFlag = False
+term_flag = False
 
 # TODO: refactor to be call order independent
 # accept connection from sensor client:
@@ -80,24 +76,23 @@ def recv_all(sock, size):
 
 def data_receiver_task():
     """thread task that receives sensor data and writes it to files in CSV format"""
-    global terminationFlag
+    global term_flag
 
     # open output file descriptors for writing:
-    with open(f"{parent_dir}/output/sensor1.csv", "w") as fSensor1, open(
-        f"{parent_dir}/output/sensor2.csv", "w"
-    ) as fSensor2:
+    with open(f"{output_path}/sensor1.csv", "w") as sensor_outfile1, open(
+        f"{output_path}/sensor2.csv", "w"
+    ) as sensor_outfile2:
         logger.info("Opened sensor data files!")
 
         current_sensor = None
-        while not terminationFlag:
+        while not term_flag:
             # Receiving entire packet
             packet = recv_all(conn, 36)
-            # logger.log(f'packet: {struct.unpack(">4d", packet)}')
             if packet is None:
                 pass
             elif packet[:8] == b"END_STOP":
-                logger.info("Received terminationFlag trigger")
-                terminationFlag = True
+                logger.info("Received term_flag trigger")
+                term_flag = True
             else:
                 # Splitting packet into metadata and sensor data
                 unpacked = struct.unpack(">4dI", packet)
@@ -107,9 +102,9 @@ def data_receiver_task():
                 if sensor_change:
                     logger.debug(f"Now receiving data for sensor ID {current_sensor}")
                 if current_sensor == 0:
-                    fSensor1.write(format_output(unpacked))
+                    sensor_outfile1.write(format_output(unpacked))
                 elif current_sensor == 1:
-                    fSensor2.write(format_output(unpacked))
+                    sensor_outfile2.write(format_output(unpacked))
                 else:
                     logger.critical(
                         f"Got invalid sensor ID: `{current_sensor}`, possible packet corruption"
@@ -127,10 +122,10 @@ def term_signalling_task():
     """thread task that forwards an external termination signal"""
     while True:
         try:
-            # stopSignal = conn2.recv(10)
-            if stopSignal:
+            # stop_signal = conn2.recv(10)
+            if stop_signal:
                 logger.info("Stop signal received, forwarding to sensor client...")
-                conn.sendall(stopSignal)
+                conn.sendall(stop_signal)
                 break
         except:
             logger.error("Error encountered while forwarding stop program flag")
@@ -138,11 +133,11 @@ def term_signalling_task():
 
 
 # Start threads to handle each client
-sensorThread = threading.Thread(target=data_receiver_task, daemon=True)
-stoppingThread = threading.Thread(target=term_signalling_task, daemon=True)
+sensor_polling_thread = threading.Thread(target=data_receiver_task, daemon=True)
+termination_listener_thread = threading.Thread(target=term_signalling_task, daemon=True)
 
-sensorThread.start()
-stoppingThread.start()
+sensor_polling_thread.start()
+termination_listener_thread.start()
 
-stoppingThread.join()
-sensorThread.join()
+termination_listener_thread.join()
+sensor_polling_thread.join()
