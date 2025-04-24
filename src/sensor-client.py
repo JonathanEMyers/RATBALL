@@ -60,7 +60,7 @@ logger.info(f"Listening on {ingestHostIP}:{ingestListenerPort}...")
 sensor_manifest = [Sensor(0x17), Sensor(0x67)]
 
 # begin polling sensors:
-for sensor in sensor_manifest():
+for sensor in sensor_manifest:
     sensor.begin()
 
 # thread-global flag for signalling receipt of an external termination signal:
@@ -93,7 +93,7 @@ def pack_motion_data(metadata: float, motion_data, sensor_idx: int):
 def data_enqueue_task():
     """thread task that pushes sensor data into deque buffers"""
     while not termFlag:
-        for sensor in sensor_manifest():
+        for sensor in sensor_manifest:
             sensor.poll_data()
 
 
