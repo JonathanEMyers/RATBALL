@@ -25,29 +25,32 @@ cleanup_on_exit() {
 trap cleanup_on_exit INT
 
 
-# VENV_PATH="$PROJECT_ROOT_PATH/.venv"
-# if [[ ! -d "$VENV_PATH" ]] ; then 
-# 	$(which python3) -m venv .venv
-# fi
+# Check for existence of venv, create one if not found
+VENV_PATH="$PROJECT_ROOT_PATH/.venv"
+if [[ ! -d "$VENV_PATH" ]] ; then 
+	uv venv
+fi
+
+# Pull all dependencies
+uv sync
 
 SRC_DIR="$PROJECT_ROOT_PATH/src"
 
 
-# source "$VENV_PATH/bin/activate"
-# pip install -r './requirements.txt' > /dev/null 2>&1 
-
 # Start the server in the background
 printf '%s\n\n' "Starting server..."
-python3 "$SRC_DIR/sensor-server.py" &
+uv run "$SRC_DIR/sensor-server.py" &
 SERVER_PID="$!"
+sleep 2
 
 # Start the sensor data client in the background
 printf '%s\n\n' "Starting sensor data client..."
-python3 "$SRC_DIR/sensor-client.py" &
+uv run "$SRC_DIR/sensor-client.py" &
 SENSOR_PID="$!"
+sleep 2
 
 # Start the stopping client (after some delay)
-python3 "$SRC_DIR/terminator.py" &
+uv run "$SRC_DIR/terminator.py" &
 STOP_PID="$!"
 
 # Wait for stop client to finish
