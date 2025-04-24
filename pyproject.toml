@@ -9,6 +9,7 @@ dependencies = [
     "numpy>=1.24.4",
     "pyyaml>=6.0.2",
     "ruff==0.11.6",
+    "sounddevice>=0.5.1",
     "sparkfun-qwiic-i2c>=2.0.0",
     "sparkfun-qwiic-otos>=2.0.0",
 ]
