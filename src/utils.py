@@ -1,6 +1,6 @@
 from datetime import timezone, datetime as dt
 
-unix_epoch = datetime.fromtimestamp(0, timezone.utc)
+unix_epoch = dt.fromtimestamp(0, timezone.utc)
 def unix_time_millis(dt):
     """formats timestamps as milliseconds-since-epoch (double-precision float, only requires 8 bytes)"""
     if dt.tzinfo is None:
