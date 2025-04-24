@@ -4,7 +4,7 @@ import qwiic_otos
 # Python stdlib:
 from collections import deque  # for buffers
 
-import datetime
+from datetime import datetime
 import os.path
 import sys
 
