@@ -3,7 +3,7 @@ import qwiic_otos
 
 # Python stdlib:
 from collections import deque  # for buffers
-from utils import unix_time_millis
+from .utils import unix_time_millis
 
 
 class Sensor:
