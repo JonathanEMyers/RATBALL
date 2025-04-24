@@ -32,7 +32,7 @@ class Sensor:
     def poll_data(self):
         data = self.device.getPosVelAcc()
         if data:
-            metadata = self.unix_time_millis(datetime.now())
+            metadata = unix_time_millis(datetime.now())
             self.data_buffer.append(data)
             self.meta_buffer.append(metadata)
 
