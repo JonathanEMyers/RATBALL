@@ -18,5 +18,5 @@
     rate: 44100
 - speakerSettings:
     channels: 1
-    blockSize: 4096
+    blockSize: 8192
     amplitude: .5

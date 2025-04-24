@@ -41,8 +41,9 @@ jetsonConn, jetsonAddr = jetsonSocket.accept()
 print(f"In BMICode -- Connected to Jetson through {jetsonAddr}")
 
 
-# Defining stop message
+# Defining start and stop message
 beginStopMessage = b'BEGIN_STOP' # Message can be changed, just a prototype
+beginExpMessage = b'BEGIN_EXPE'
 
 # Waiting to simulate experiment time
 numMinutes = 0
@@ -54,18 +55,23 @@ frequency = 500
 # Byte array for possible expansion later down the line
 expansionBytes = b'000000'
 
+time.sleep(2)
+
+# Send start experiment transmission to jetson
+jetsonConn.sendall(beginExpMessage)
+
 
 # Sending various frequencies
-while(frequency < 10000):
+while(frequency < 2000):
     packedFrequency = struct.pack('>f', frequency)
     jetsonConn.sendall(packedFrequency + expansionBytes)
-    time.sleep(1/30)
+    time.sleep(1)
     frequency += 100
 
 frequency = 0
 packedFrequency = struct.pack('>f', frequency)
 jetsonConn.sendall(packedFrequency + expansionBytes)
-time.sleep(31)
+time.sleep(1)
 
 
 # Transmitting stop flag

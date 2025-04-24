@@ -44,9 +44,10 @@ with open(settingsFilename, 'r') as settingsFile:
 audioChunkSize = int(audioRate / framerate)
 audioDataFilepath = "25_04_19_Audio.raw"
 audioMetaFilepath = "25_04_19_Audio.csv"
+blankDataFilepath = "25_04_19_Blank.csv"
 
 
-metadataSize = 2 * 8 + 4       # UPDATE FOR EACH NEW PIECE OF DATA -- Known metadata size (in bytes) at transmission
+metadataSize = 6 * 8 + 4       # UPDATE FOR EACH NEW PIECE OF DATA -- Known metadata size (in bytes) at transmission
                                 #   - Six timestamps, (8 bytes each), one for each:
                                 #       - One microphone
                                 #       - Four placeholder (blank) sensor channels
@@ -54,7 +55,9 @@ metadataSize = 2 * 8 + 4       # UPDATE FOR EACH NEW PIECE OF DATA -- Known meta
                                 #   - One four-byte int
                                 #       - For the frame counter
 
-dataSize = 2*audioChunkSize
+dataSize = 2*audioChunkSize + 4*8       # UPDATE FOR EACH NEW PIECE OF DATA
+                                        #   - 2*audiochunksize for 16-bit LE format single channel
+                                        #   - 4*8 for 4 eight-byte blank channel expansion slots
 
 # Define flags
 beginTermination = False
@@ -112,9 +115,15 @@ def handleJetson():
     global endTermination
 
     # Open all necessary files (metadata files, audio file, sensor data file, etc.)
-    with open(audioDataFilepath, "wb") as fAudio, open(audioMetaFilepath, "w", newline='') as fAudioMeta:
+    with (
+        open(audioDataFilepath, "wb") as fAudio,
+        open(audioMetaFilepath, "w", newline='') as fAudioMeta,
+        open(blankDataFilepath, "w", newline='') as fBlank
+    ):
         audioWriter = csv.writer(fAudioMeta)
+        blankWriter = csv.writer(fBlank)
         audioWriter.writerow(["Frame Count", "Reception Time", "Sent Time", "Taken time"])
+        blankWriter.writerow(["Frame Count", "Reception Time", "Sent Time", "Lick Sensor Taken Time", "Lick Sensor Value", "Sensor One Taken Time", "Sensor One Value", "Sensor Two Taken Time", "Sensor Two Value", "Sensor Three Taken Time", "Sensor Three Value"])
         print("In ingestorCode.handleJetson() -- Opened files!")
 
         while(not endTermination):
@@ -148,11 +157,27 @@ def handleJetson():
                 audioTimeTakenPacked = metadata[12:20]
                 audioTimeTaken = struct.unpack('d', audioTimeTakenPacked)[0]
 
+                lickTimeTakenPacked = metadata[20:28]
+                lickTimeTaken = struct.unpack('d', lickTimeTakenPacked)[0]
+
+                blankOneTimeTakenPacked = metadata[28:36]
+                blankOneTimeTaken = struct.unpack('d', blankOneTimeTakenPacked)[0]
+
+                blankTwoTimeTakenPacked = metadata[36:44]
+                blankTwoTimeTaken = struct.unpack('d', blankTwoTimeTakenPacked)[0]
+
+                blankThreeTimeTakenPacked = metadata[44:52]
+                blankThreeTimeTaken = struct.unpack('d', blankThreeTimeTakenPacked)[0]
+
 
                 # Splitting data into individual elements
                 #   - Same idea as the metadata splitting
                 #   - Video data should be last so we dont have to use massive index values
-                audioData = data
+                lickData = data[:8]
+                blankOneData = data[8:16]
+                blankTwoData = data[16:24]
+                blankThreeData = data[24:32]
+                audioData = data[32:]
 
                 # Reformat video metadata and append it to file
                 # Reshape video data and create a file for it
@@ -162,9 +187,10 @@ def handleJetson():
 
                 # Reformat audio metadata and append it to file
                 audioWriter.writerow([frameCount, receptionTimeSinceEpoch, timeSent, audioTimeTaken])
+                blankWriter.writerow([frameCount, receptionTimeSinceEpoch, timeSent, lickTimeTaken, lickData, blankOneTimeTaken, blankOneData, blankTwoTimeTaken, blankTwoData, blankThreeTimeTaken, blankThreeData])
                 # print(f"{frameCount},{receptionTime},{audioTimeTaken}")
                 # Reformat audio data and append it to file 
-                fAudio.write(data)
+                fAudio.write(audioData)
 
 
     # Transmission is finished, close all openings

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import cv2
 import sys  # For getting size of datatypes
 import Microphone
+import blankSensor
 
 # Open settings file and gather necessary information
 settingsFilename = "settings.yaml"
@@ -45,8 +46,9 @@ audioChunkSize = int(audioRate / framerate)
 speakerFrequency = 0
 frameCounter = 1
 bufferSize = bufferLength * framerate
+reconnectTimer = 60
 
-metadataSize = 2 * 8 + 4       # UPDATE FOR EACH NEW PIECE OF DATA -- Known metadata size (in bytes) at transmission
+metadataSize = 6 * 8 + 4       # UPDATE FOR EACH NEW PIECE OF DATA -- Known metadata size (in bytes) at transmission
                                 #   - Six timestamps, (8 bytes each), one for each:
                                 #       - One microphone
                                 #       - Four placeholder (blank) sensor channels
@@ -54,15 +56,17 @@ metadataSize = 2 * 8 + 4       # UPDATE FOR EACH NEW PIECE OF DATA -- Known meta
                                 #   - One four-byte int
                                 #       - For the frame counter
 
+dataSize = 2*audioChunkSize + 4*8       # UPDATE FOR EACH NEW PIECE OF DATA
+                                        #   - 2*audiochunksize for 16-bit LE format single channel
+                                        #   - 4*8 for 4 eight-byte blank channel expansion slots
+
 
 
 # Define flags
+beginExperiment = False
 beginTermination =  False
 endTermination = False
 whichBuffer = True
-
-# Define sensor objects (2 optical, 2 camera, microphone, speaker, placeholders)
-mic = Microphone.Microphone(bufferSize, audioRate, audioNumChannels, audioFormat, framerate)
 
 # Connect to Ingestor Server
 ingestSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -77,6 +81,13 @@ BMISocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system
 BMISocket.bind((BMIHostIP, BMIJetsonPort))
 BMISocket.connect((BMIHostIP, BMIListenerPort))
 print("In jetsonCode -- Connected to BMI!")
+
+# Define sensor objects (2 optical, 2 camera, microphone, speaker, placeholders)
+mic = Microphone.Microphone(bufferSize, audioRate, audioNumChannels, audioFormat, framerate)
+lickSensor = blankSensor.blankSensor(bufferSize, framerate)
+blankSensorOne = blankSensor.blankSensor(bufferSize, framerate)
+blankSensorTwo = blankSensor.blankSensor(bufferSize, framerate)
+blankSensorThree = blankSensor.blankSensor(bufferSize, framerate)
 
 
 
@@ -121,21 +132,60 @@ def audioCallback(outdata, frames, time, status):
 audioCallback.phase = 0  # Initial phase
 
 
+# This function is called in case of a broken tcp connection between the jetson and another computer
+# It tries to re-establish the connection for up to 60 seconds
+def reconnectToIngestor():
+    startTime = time.time()
+
+    while(time.time() - startTime < reconnectTimer):
+        try:
+            ingestSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            ingestSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
+            ingestSocket.bind((ingestHostIP, ingestJetsonPort))
+            ingestSocket.connect((ingestHostIP, ingestListenerPort))
+        except(BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(f"In jetsonCode.reconnectToIngestor() -- Connection lost: {e}, retrying connection!")
+            time.sleep(1)
+    print("In jetsonCode -- Connected to ingestor!")
+
+def reconnectToBMI():
+    startTime = time.time()
+
+    while(time.time() - startTime < reconnectTimer):
+        try:
+            BMISocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            BMISocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
+            BMISocket.bind((BMIHostIP, BMIJetsonPort))
+            BMISocket.connect((BMIHostIP, BMIListenerPort))
+        except(BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(f"In jetsonCode.reconnectToBMI() -- Connection lost: {e}, retrying connection!")
+            time.sleep(1)
+    print("In jetsonCode -- Connected to BMI!")
+
 
 
 
                     # Thread-associated functions
 
 def gatherSensorData():
+    global beginExperiment
     global beginTermination
     global whichBuffer
     frameInterval = 1/framerate
     expStartTime = time.perf_counter()
+    nextFrameTime = expStartTime
+
+    # Wait for signal from BMI to start experiment
+    while(not beginExperiment):
+        time.sleep(.1)
+        
+    print("In jetsonCode.gatherSensorData() -- Received trigger, starting data collection!")
 
     while(not beginTermination):
 
         # Take time with perf_counter()
         startTime = time.perf_counter()
+        print(f"Frame: {mic.frameCount}, Ideal: {nextFrameTime}, Actual: {startTime}, ExpTime: {nextFrameTime - expStartTime}")
 
         # Append new frame to camera buffers
 
@@ -145,8 +195,12 @@ def gatherSensorData():
         audioAdditionSuccess = mic.appendMicData(whichBuffer)
 
         # Append similated lick reading to lick sensor object buffer
+        lickAdditionSuccess = lickSensor.appendBlankSensorData(whichBuffer)
 
         # Append simulated Misc. sensor readings to misc. sensor object buffers
+        blankOneAdditionSuccess = blankSensorOne.appendBlankSensorData(whichBuffer)
+        blankTwoAdditionSuccess = blankSensorTwo.appendBlankSensorData(whichBuffer)
+        blankThreeAdditionSuccess = blankSensorThree.appendBlankSensorData(whichBuffer)
 
         # Switching whichBuffer flag
         if(whichBuffer and len(mic.dataBufferOne) >= bufferSize):
@@ -160,15 +214,12 @@ def gatherSensorData():
         endTime = time.perf_counter()
 
         # Wait the difference between elapsed time and 1/framerate seconds
-        timeDelta = endTime - startTime
-        timeToWait = frameInterval - timeDelta
-
-        print(f'frameCount: {mic.frameCount}, timeToWait: {timeToWait}, timeSinceStart: {endTime - expStartTime}')
+        nextFrameTime += frameInterval
 
         # time.sleep(max(0, timeToWait))
 
         # Time.sleep is not very accurate, so using a busy loop with perf_counter()
-        while(time.perf_counter() - startTime < frameInterval):
+        while(time.perf_counter() < nextFrameTime):
             pass
 
 
@@ -206,6 +257,12 @@ def sendSensorData():
 
                 # Pull lick metadata from lick metadata buffer one
                 # Pull lick data from lick data buffer one
+                lickMetadata, lickData = lickSensor.popSensorData(whichBuffer)
+
+                # Pull blank sensor metadata and data
+                blankOneMetadata, blankOneData = blankSensorOne.popSensorData(whichBuffer)
+                blankTwoMetadata, blankTwoData = blankSensorTwo.popSensorData(whichBuffer)
+                blankThreeMetadata, blankThreeData = blankSensorThree.popSensorData(whichBuffer)
 
             elif(whichBuffer and (len(mic.dataBufferTwo) > 0)):
 
@@ -223,6 +280,12 @@ def sendSensorData():
 
                 # Pull lick metadata from lick metadata buffer two
                 # Pull lick data from lick data buffer two
+                lickMetadata, lickData = lickSensor.popSensorData(whichBuffer)
+
+                # Pull blank sensor metadata and data
+                blankOneMetadata, blankOneData = blankSensorOne.popSensorData(whichBuffer)
+                blankTwoMetadata, blankTwoData = blankSensorTwo.popSensorData(whichBuffer)
+                blankThreeMetadata, blankThreeData = blankSensorThree.popSensorData(whichBuffer)
 
             # Program has not stopped yet but there is no data in buffers at the moment
             else:
@@ -247,6 +310,12 @@ def sendSensorData():
 
                 # Pull lick metadata from lick metadata buffer one
                 # Pull lick data from lick data buffer one
+                lickMetadata, lickData = lickSensor.popSensorData(False)
+
+                # Pull blank sensor data from blank sensor objects
+                blankOneMetadata, blankOneData = blankSensorOne.popSensorData(False)
+                blankTwoMetadata, blankTwoData = blankSensorTwo.popSensorData(False)
+                blankThreeMetadata, blankThreeData = blankSensorThree.popSensorData(False)
 
             # There are items still in buffer two
             elif(len(mic.dataBufferTwo) > 0):
@@ -264,6 +333,12 @@ def sendSensorData():
 
                 # Pull lick metadata from lick metadata buffer two
                 # Pull lick data from lick data buffer two
+                lickMetadata, lickData = lickSensor.popSensorData(True)
+
+                # Pull blank sensor data from blank sensor objects
+                blankOneMetadata, blankOneData = blankSensorOne.popSensorData(True)
+                blankTwoMetadata, blankTwoData = blankSensorTwo.popSensorData(True)
+                blankThreeMetadata, blankThreeData = blankSensorThree.popSensorData(True)
 
             # Data is finished transmission
             else:
@@ -273,8 +348,12 @@ def sendSensorData():
                 # Sending stop transmission
                 print("In jetsonCode.sendAudio() -- No data left, sending endTermination trigger!")
                 try:
-                    totalPacket = b'END_STOP' + bytearray(metadataSize + (2 * audioChunkSize) - len(b"END_STOP"))
-                    ingestSocket.sendall(totalPacket)
+                    totalPacket = b'END_STOP' + bytearray(metadataSize + dataSize - len(b"END_STOP"))
+
+                    try:
+                        ingestSocket.sendall(totalPacket)
+                    except:
+                        reconnectToIngestor()
                     print("In jetsonCode.sendAudio() -- Sent endTermination trigger!")
                     endTermination = True
 
@@ -292,10 +371,18 @@ def sendSensorData():
 
             # Assemble total packet
             #   - packedFrameCounter + sentTime + camMeta + ODOMMeta + audioMeta + lickMeta + camData + ODOMData + audioData + lickData
-            totalPacket = frameCountPacked + sentTimeSinceEpochPacked + audioMetadata + audioData
+            totalPacket = (
+                frameCountPacked + sentTimeSinceEpochPacked + 
+                audioMetadata + lickMetadata + blankOneMetadata + blankTwoMetadata + blankThreeMetadata +
+                lickData + blankOneData + blankTwoData + blankThreeData + audioData
+            )
+
 
             # Send total packet over ingestor connection
-            ingestSocket.sendall(totalPacket)
+            try:
+                ingestSocket.sendall(totalPacket)
+            except:
+                reconnectToIngestor()
         
             frameCounter += 1
     
@@ -309,6 +396,7 @@ def sendSensorData():
 
 
 def recieveStop():
+    global beginExperiment
     global beginTermination
     global speakerFrequency
 
@@ -316,11 +404,16 @@ def recieveStop():
 
 
     while(not beginTermination):
-        message = recvAll(BMISocket, 10)
+        try:
+            message = recvAll(BMISocket, 10)
+        except:
+            reconnectToBMI()
 
         if(message.startswith(b'BEGIN_STOP')):
             print("In jetsonCode.recieveStop() -- Received beginTermination trigger!")
             beginTermination = True
+        elif(message.startswith(b'BEGIN_EXPE')):
+            beginExperiment = True
         else:
             speakerFrequency = struct.unpack('>f', message[:4])[0]
             extraBytes = message[4:]
