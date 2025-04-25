@@ -5,10 +5,8 @@ import socket
 import sys
 import os
 
-from datetime import datetime, timezone
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from utils import unix_time_millis
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 # custom sensor class for OTOS sensors:
 from sensor import Sensor

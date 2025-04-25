@@ -13,7 +13,7 @@ logger.add(
 
 self_path = os.path.abspath(__file__)
 self_dir = os.path.split(self_path)[0]
-parent_dir = os.path.abspath(os.path.join(self_dir, '..'))
+parent_dir = os.path.abspath(os.path.join(self_dir, ".."))
 
 try:
     from yaml import CSafeLoader as SafeLoader
@@ -125,7 +125,7 @@ def term_signalling_task():
             # stop_signal = conn2.recv(10)
             if stop_signal:
                 logger.info("Stop signal received, forwarding to sensor client...")
-                conn.sendall(stop_signal)
+                # conn.sendall(stop_signal)
                 break
         except:
             logger.error("Error encountered while forwarding stop program flag")

@@ -123,18 +123,24 @@ def audio_callback(outdata, frames):
 audio_callback.phase = 0  # Initial phase
 
 reconnect_timer = 60
+
+
 # This function is called in case of a broken tcp connection between the jetson and another computer
 # It tries to re-establish the connection for up to 60 seconds
 def reconnect_to_ingestor():
     start_time = time.time()
-    while(time.time() - start_time < reconnect_timer):
+    while time.time() - start_time < reconnect_timer:
         try:
             ingestSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            ingestSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
+            ingestSocket.setsockopt(
+                socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+            )  # So the system does not wait so long after the program terminates to close the socket
             ingestSocket.bind((ingest_ip, jetson_ingest_comm_port))
             ingestSocket.connect((ingest_ip, ingest_listen_port))
-        except(BrokenPipeError, ConnectionResetError, OSError) as e:
-            print(f"In jetsonCode.reconnectToIngestor() -- Connection lost: {e}, retrying connection!")
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(
+                f"In jetsonCode.reconnectToIngestor() -- Connection lost: {e}, retrying connection!"
+            )
             time.sleep(1)
     print("In jetsonCode -- Connected to ingestor!")
 
@@ -142,14 +148,18 @@ def reconnect_to_ingestor():
 def reconnect_to_BMI():
     start_time = time.time()
 
-    while(time.time() - start_time < reconnect_timer):
+    while time.time() - start_time < reconnect_timer:
         try:
             BMISocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            BMISocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # So the system does not wait so long after the program terminates to close the socket
+            BMISocket.setsockopt(
+                socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+            )  # So the system does not wait so long after the program terminates to close the socket
             BMISocket.bind((bmi_ip, jetson_bmi_comm_port))
             BMISocket.connect((bmi_ip, bmi_listen_port))
-        except(BrokenPipeError, ConnectionResetError, OSError) as e:
-            print(f"In jetsonCode.reconnectToBMI() -- Connection lost: {e}, retrying connection!")
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(
+                f"In jetsonCode.reconnectToBMI() -- Connection lost: {e}, retrying connection!"
+            )
             time.sleep(1)
     print("In jetsonCode -- Connected to BMI!")
 
@@ -226,7 +236,6 @@ def term_listener_task():
 
 
 def speaker_playback():
-
     with sd.OutputStream(
         callback=audio_callback,
         samplerate=audio_rate,
