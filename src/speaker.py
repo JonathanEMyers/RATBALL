@@ -12,7 +12,7 @@ class speaker:
         self.stream = None
         self.running = False
 
-    # This function 
+    # This function is used to generate data for the audio stream callback
     def audio_callback(self, outdata, frames, time_info, status):
         freq = self.frequency
         t = (np.arange(frames) + self.phase) / self.samplerate
