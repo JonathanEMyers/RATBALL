@@ -10,9 +10,9 @@ tmp_should_stream = False
 
 HOST = "192.168.0.11"
 PORT = 10_000
-OUTPUT_DIR = f"/mnt/extended/data_captures/camera/{datetime.now().strftime('%Y-%m-%d')}"
+OUTPUT_DIR = f"/mnt/extended/data_capture/camera/{datetime.now().strftime('%Y-%m-%d')}"
 
-makedirs(OUTPUT_DIR, exists_ok=True)
+makedirs(OUTPUT_DIR, exist_ok=True)
 
 def _send_all(sock: socket.socket, data: bytes) -> None:
     """Reliable send that keeps calling send() until *data* is drained."""
@@ -34,11 +34,16 @@ def send_frame(sock: socket.socket, cam_id: int, frame: bytes, ts: bytes) -> Non
     header = struct.pack("!BIQ", cam_id, len(frame), ts)
     _send_all(sock, header + frame)
 
-camargs = (width=1280, height=720, framerate=30, output_dir=OUTPUT_DIR)
+cam_kwargs = {
+    'width': 1280,
+    'height': 720,
+    'output_dir': OUTPUT_DIR,
+    'framerate': 30
+}
 
 camera_manifest = (
-    Camera(sensor_id=0, *camargs),
-    Camera(sensor_id=1, *camargs),
+    Camera(0, **cam_kwargs),
+    Camera(1, **cam_kwargs),
 )
 
 capture_active = False
@@ -75,5 +80,7 @@ except (KeyboardInterrupt, BrokenPipeError):
     print("\nShutting down gracefully…", file=sys.stderr)
 
 finally:
-    cam0.stop()
-    cam1.stop()
+    for cam in camera_manifest:
+        cam.stop()
+
+

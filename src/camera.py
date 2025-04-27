@@ -14,43 +14,80 @@ from buffers import DoubleBuffer
 
 # slams out crappy frames as fast as possible
 def gstreamer_dyn_pipeline(sensor_id: int, width: int, height: int, fps: int) -> str:
-    """Jetson CSI → GRAY8 pipeline string optimized for low-latency network transfer."""
+    """Jetson CSI → GRAY8 pipeline string (semi-)optimized for low-latency network transfer."""
     return (
         f"nvarguscamerasrc sensor-id={sensor_id} ! "
-        # f"nvarguscamerasrc sensor-id={sensor_id} num-buffers=150 ! "
         f"video/x-raw(memory:NVMM), width={width}, height={height}, "
         f"format=NV12, framerate={fps}/1 ! "
-        # f"nvvidconv flip-method=0 ! "
         f"nvvidconv flip-method=2 ! "
-        # f"video/x-raw, width={width}, height={height}, format=BGRx ! "
         f"videoconvert ! video/x-raw, format=GRAY8 ! appsink"
     )
 
 
 # saves mp4 to a predetermined (absolute) path
-def gstreamer_static_pipeline(
-    sensor_id: int, width: int, height: int, fps: int, outpath: str
+def gstreamer_static_pipeline_mp4(
+        sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
 ) -> str:
-    """Jetson CSI → h264 pipeline string optimized for high quality output file for out-of-band transfer."""
+    """Jetson CSI → h264 MP4 pipeline string optimized for high quality output file."""
     return (
-        f"nvarguscamerasrc sensor-id{sensor_id} ! "
-        f"video/x-raw(memory:NVMM),width={width},height={height},framerate={fps}/1 ! "
+        f"nvarguscamerasrc sensor-id={sensor_id} ispdigitalgainrange=\"1 1\" ! "
+        f"video/x-raw(memory:NVMM), width={width}, height={height}, framerate={fps}/1 ! "
+
         # convert out of NVMM so the overlay element can work
-        f"nvvidconv ! video/x-raw,format=BGRx ! "
+        f"nvvidconv ! video/x-raw, format=BGRx ! "
+
         # overlay buffer-time in h:mm:ss.mmm format
         f"timeoverlay time-mode=running-time halignment=left valignment=top "
-        'font-desc="Monospace, 28" shaded-background=true ! '
-        # duplicate the annotated stream: one branch goes to file, the other to OpenCV
+        f"font-desc=\"Monospace, 28\" shaded-background=true ! "
+
+        # split the streams (don't cross them)
         f"tee name=t "
-        f"t. ! queue ! videoconvert ! "
-        f"x264enc speed-preset=ultrafast tune=zerolatency bitrate=8000 ! "
-        f"mp4mux ! filesink location={outpath} sync=false "
-        f"t. ! queue ! videoconvert ! appsink emit-signals=true drop=true"
+
+        # first branch goes to appsink (opencv)
+        f"t. ! queue ! videoconvert ! video/x-raw, format=BGR !"
+        f"appsink emit-signals=true "
+#        f"drop=true max-buffers=30 "
+
+        # second branch streams to filesink (output mp4)
+        f"t. ! queue ! nvvidconv ! video/x-raw, format=I420 ! "
+        f"x264enc tune=zerolatency speed-preset=ultrafast bitrate={bitrate} ! mp4mux !"
+        f"filesink location=\"{outpath}.mp4\" sync=false "
+    )
+
+# saves mkv to a predetermined (absolute) path
+def gstreamer_static_pipeline_mkv(
+        sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
+) -> str:
+    """Jetson CSI → h264 Matroska pipeline string optimized for high quality output file."""
+    return (
+        f"nvarguscamerasrc sensor-id={sensor_id} ispdigitalgainrange=\"1 1\" ! "
+        f"video/x-raw(memory:NVMM), width={width}, height={height}, framerate={fps}/1 ! "
+
+        # convert out of NVMM so the overlay element can work
+        f"nvvidconv flip-method=2 ! video/x-raw, format=BGRx ! "
+
+        # overlay buffer-time in h:mm:ss.mmm format
+        f"timeoverlay time-mode=running-time halignment=left valignment=top "
+        f"font-desc=\"Monospace, 28\" shaded-background=true ! "
+
+        # split the streams (don't cross them!!)
+        f"tee name=t "
+
+        # first branch goes to appsink (opencv)
+        f"t. ! queue ! videoconvert ! video/x-raw, format=BGR !"
+        f"appsink emit-signals=true "
+#        f"drop=true max-buffers=30 "
+
+        # second branch streams to filesink (output mp4)
+        f"t. ! queue ! nvvidconv ! video/x-raw, format=I420 ! "
+        # no on-board hardware encoders, use x264 and output to Matroska container
+        f"x264enc tune=zerolatency speed-preset=ultrafast bitrate={bitrate} ! "
+        f"splitmuxsink location=\"{outpath}.mkv\" muxer=matroskamux "
     )
 
 
-FrameRecord = Tuple[bytes, bytes]
 
+FrameRecord = Tuple[bytes, bytes]
 
 class Camera:
     """
@@ -66,6 +103,7 @@ class Camera:
         "height",
         "fps",
         "output_dir",
+        "_outpath",
         "_capture_is_static",
         "_buffer",
         "_cap",
@@ -78,7 +116,6 @@ class Camera:
         sensor_id: int,
         width: int,
         height: int,
-        *,
         framerate: int = 30,
         buffer_seconds: int = 10,
         output_dir: Optional[str] = None,
@@ -88,6 +125,8 @@ class Camera:
         self.height = height
         self.fps = framerate
         self.output_dir = output_dir
+
+        self._outpath = f"{output_dir}/cam{sensor_id}" if output_dir is not None else None
 
         self._capture_is_static = True if output_dir is not None else False
 
@@ -101,10 +140,10 @@ class Camera:
                 gstreamer_dyn_pipeline(sensor_id, width, height, framerate),
                 cv2.CAP_GSTREAMER,
             )
-            if output_dir is None
+            if self._outpath is None
             else cv2.VideoCapture(
-                gstreamer_static_pipeline(
-                    sensor_id, width, height, framerate, output_dir
+                gstreamer_static_pipeline_mkv(
+                    sensor_id, width, height, framerate, self._outpath
                 ),
                 cv2.CAP_GSTREAMER,
             )
@@ -165,16 +204,12 @@ class Camera:
                     time.sleep(sleep_time)
 
                 ret, frame = self._cap.read()
-                # Correct img orientation
-                # frame = cv2.flip(frame, 0)
-
-                next_frame_time += frame_interval
-
                 if not ret:
                     # Simple error handling: skip this frame
                     print(f"skipped frame @ ival:{frame_interval}")
                     continue
 
+                next_frame_time += frame_interval
                 # Generate metadata
                 ts = datetime.now(timezone.utc)
                 # ms_since_epoch = unix_time_millis(ts)
