@@ -20,8 +20,13 @@ speaker:
   channels: 1
   block_size: 4096
   amplitude: .5
+sensor:
+  i2c_addr:
+    - 0x17
+    - 0x67
 data_paths:
   sensor: /mnt/extended/data_capture/sensor
   camera: /mnt/extended/data_capture/camera
   audio: /mnt/extended/data_capture/audio
+  logs: /mnt/extended/data_capture/logs
 

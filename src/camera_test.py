@@ -14,6 +14,7 @@ OUTPUT_DIR = f"/mnt/extended/data_capture/camera/{datetime.now().strftime('%Y-%m
 
 makedirs(OUTPUT_DIR, exist_ok=True)
 
+
 def _send_all(sock: socket.socket, data: bytes) -> None:
     """Reliable send that keeps calling send() until *data* is drained."""
     view = memoryview(data)
@@ -34,12 +35,8 @@ def send_frame(sock: socket.socket, cam_id: int, frame: bytes, ts: bytes) -> Non
     header = struct.pack("!BIQ", cam_id, len(frame), ts)
     _send_all(sock, header + frame)
 
-cam_kwargs = {
-    'width': 1280,
-    'height': 720,
-    'output_dir': OUTPUT_DIR,
-    'framerate': 30
-}
+
+cam_kwargs = {"width": 1280, "height": 720, "output_dir": OUTPUT_DIR, "framerate": 30}
 
 camera_manifest = (
     Camera(0, **cam_kwargs),
@@ -82,5 +79,3 @@ except (KeyboardInterrupt, BrokenPipeError):
 finally:
     for cam in camera_manifest:
         cam.stop()
-
-

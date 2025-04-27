@@ -26,68 +26,59 @@ def gstreamer_dyn_pipeline(sensor_id: int, width: int, height: int, fps: int) ->
 
 # saves mp4 to a predetermined (absolute) path
 def gstreamer_static_pipeline_mp4(
-        sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
+    sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
 ) -> str:
     """Jetson CSI → h264 MP4 pipeline string optimized for high quality output file."""
     return (
-        f"nvarguscamerasrc sensor-id={sensor_id} ispdigitalgainrange=\"1 1\" ! "
+        f'nvarguscamerasrc sensor-id={sensor_id} ispdigitalgainrange="1 1" ! '
         f"video/x-raw(memory:NVMM), width={width}, height={height}, framerate={fps}/1 ! "
-
         # convert out of NVMM so the overlay element can work
         f"nvvidconv ! video/x-raw, format=BGRx ! "
-
         # overlay buffer-time in h:mm:ss.mmm format
         f"timeoverlay time-mode=running-time halignment=left valignment=top "
-        f"font-desc=\"Monospace, 28\" shaded-background=true ! "
-
+        f'font-desc="Monospace, 28" shaded-background=true ! '
         # split the streams (don't cross them)
         f"tee name=t "
-
         # first branch goes to appsink (opencv)
         f"t. ! queue ! videoconvert ! video/x-raw, format=BGR !"
         f"appsink emit-signals=true "
-#        f"drop=true max-buffers=30 "
-
+        #        f"drop=true max-buffers=30 "
         # second branch streams to filesink (output mp4)
         f"t. ! queue ! nvvidconv ! video/x-raw, format=I420 ! "
         f"x264enc tune=zerolatency speed-preset=ultrafast bitrate={bitrate} ! mp4mux !"
-        f"filesink location=\"{outpath}.mp4\" sync=false "
+        f'filesink location="{outpath}.mp4" sync=false '
     )
+
 
 # saves mkv to a predetermined (absolute) path
 def gstreamer_static_pipeline_mkv(
-        sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
+    sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
 ) -> str:
     """Jetson CSI → h264 Matroska pipeline string optimized for high quality output file."""
     return (
-        f"nvarguscamerasrc sensor-id={sensor_id} ispdigitalgainrange=\"1 1\" ! "
+        f'nvarguscamerasrc sensor-id={sensor_id} ispdigitalgainrange="1 1" ! '
         f"video/x-raw(memory:NVMM), width={width}, height={height}, framerate={fps}/1 ! "
-
         # convert out of NVMM so the overlay element can work
         f"nvvidconv flip-method=2 ! video/x-raw, format=BGRx ! "
-
         # overlay buffer-time in h:mm:ss.mmm format
         f"timeoverlay time-mode=running-time halignment=left valignment=top "
-        f"font-desc=\"Monospace, 28\" shaded-background=true ! "
-
+        f'font-desc="Monospace, 28" shaded-background=true ! '
         # split the streams (don't cross them!!)
         f"tee name=t "
-
         # first branch goes to appsink (opencv)
         f"t. ! queue ! videoconvert ! video/x-raw, format=BGR !"
         f"appsink emit-signals=true "
-#        f"drop=true max-buffers=30 "
-
+        #        f"drop=true max-buffers=30 "
         # second branch streams to filesink (output mp4)
         f"t. ! queue ! nvvidconv ! video/x-raw, format=I420 ! "
         # no on-board hardware encoders, use x264 and output to Matroska container
         f"x264enc tune=zerolatency speed-preset=ultrafast bitrate={bitrate} ! "
-        f"splitmuxsink location=\"{outpath}.mkv\" muxer=matroskamux "
+        f'splitmuxsink location="{outpath}.mkv" muxer=matroskamux '
     )
 
 
-
 FrameRecord = Tuple[bytes, bytes]
+
 
 class Camera:
     """
@@ -126,7 +117,9 @@ class Camera:
         self.fps = framerate
         self.output_dir = output_dir
 
-        self._outpath = f"{output_dir}/cam{sensor_id}" if output_dir is not None else None
+        self._outpath = (
+            f"{output_dir}/cam{sensor_id}" if output_dir is not None else None
+        )
 
         self._capture_is_static = True if output_dir is not None else False
 
@@ -184,12 +177,10 @@ class Camera:
         if self._capture_is_static:
             ret, frame = self._cap.read()
             if not ret:
-                print(f"[static pipeline] no frame available yet, continuing")
+                print("[static pipeline] no frame available yet, continuing")
             try:
                 ns_since_epoch = time.perf_counter_ns()
-                self._buffer.put(
-                    (frame.tobytes(), ns_since_epoch), drop_if_full=False
-                )
+                self._buffer.put((frame.tobytes(), ns_since_epoch), drop_if_full=False)
             except BufferError:
                 pass
         else:
@@ -234,4 +225,3 @@ class Camera:
                     # Both rings full and drop_if_full=False → we block
                     # OR propagate – choose policy appropriate for experiment
                     pass
-
