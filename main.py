@@ -3,6 +3,7 @@ from threading import Thread, Event
 from loguru import logger
 from config import RatballConfig
 from sensor import Sensor
+from speaker import speaker
 
 
 class SensorGovernor(Thread):
@@ -106,15 +107,40 @@ class SensorGovernor(Thread):
 
 class SpeakerGovernor(Thread):
     def __init__(self):
-        super(SensorGovernor, self).__init__(self)
+        super(SpeakerGovernor, self).__init__(self)
         self._cfg = RatballConfig()
-        pass
+        self.speaker = speaker(0, self._cfg.audio.rate, self._cfg.speaker.block_size, self._cfg.buffer.framerate)
+
+        self._sock_ingest = None
+        self._sock_bmi = None
+        self._init_sockets()
+
+        self._thread_pool = [
+            Thread(target=self.run, name="_speaker_run"),
+            # listen thread runs in background, daemonize to exit when enq/tx threads die
+            Thread(target=self.listen, name="_speaker_listen", daemon=True),
+        ]
 
     def listen(self):
-        pass
+        term_msg = self._recv_all(self._sock_bmi, 10)
+
+        # If the received message is the stop program indicator message
+        if term_msg and term_msg.startswith(b"BEGIN STOP"):
+            logger.info("Received termination signal")
+            self.speaker.stop()
+            term_flag.set()
+
+        # If the received message is a normal frequency
+        else:
+            speaker_frequency = struct.unpack('>f', term_msg[:4])[0]
+            extra_bytes = term_msg[4:]
+
+            self.speaker.set_frequency(speaker_frequency)
 
     def run(self):
-        pass
+        self.speaker.run()
+
+
 
 
 class CameraGovernor(Thread):
@@ -122,6 +148,7 @@ class CameraGovernor(Thread):
         super(SensorGovernor, self).__init__(self)
         self._cfg = RatballConfig()
         pass
+    
 
     def capture(self):
         pass
