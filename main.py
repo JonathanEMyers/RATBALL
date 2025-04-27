@@ -3,7 +3,8 @@ from threading import Thread, Event
 from loguru import logger
 from config import RatballConfig
 from sensor import Sensor
-from speaker import speaker
+from speaker import Speaker
+from camera import Camera
 
 
 class SensorGovernor(Thread):
@@ -96,7 +97,7 @@ class SensorGovernor(Thread):
         term_msg = self._recv_all(self._sock_bmi, 10)
         if term_msg and term_msg.startswith(b"BEGIN STOP"):
             logger.info("Received termination signal")
-            term_flag.set()
+            self._term_flag.set()
 
     def run(self):
         for thread in self._thread_pool:
@@ -109,7 +110,8 @@ class SpeakerGovernor(Thread):
     def __init__(self):
         super(SpeakerGovernor, self).__init__(self)
         self._cfg = RatballConfig()
-        self.speaker = speaker(0, self._cfg.audio.rate, self._cfg.speaker.block_size, self._cfg.buffer.framerate)
+        self._term_flag = Event()
+        self.speaker = Speaker(0, self._cfg.audio.rate, self._cfg.speaker.block_size, self._cfg.buffer.framerate)
 
         self._sock_ingest = None
         self._sock_bmi = None
@@ -123,17 +125,16 @@ class SpeakerGovernor(Thread):
 
     def listen(self):
         term_msg = self._recv_all(self._sock_bmi, 10)
-
         # If the received message is the stop program indicator message
         if term_msg and term_msg.startswith(b"BEGIN STOP"):
             logger.info("Received termination signal")
             self.speaker.stop()
-            term_flag.set()
+            self._term_flag.set()
 
         # If the received message is a normal frequency
         else:
             speaker_frequency = struct.unpack('>f', term_msg[:4])[0]
-            extra_bytes = term_msg[4:]
+            # extra_bytes = term_msg[4:]
 
             self.speaker.set_frequency(speaker_frequency)
 
@@ -141,20 +142,55 @@ class SpeakerGovernor(Thread):
         self.speaker.run()
 
 
-
-
 class CameraGovernor(Thread):
     def __init__(self):
-        super(SensorGovernor, self).__init__(self)
+        super(CameraGovernor, self).__init__(self)
         self._cfg = RatballConfig()
+        self._tx_complete = Event()
+        self._term_flag = Event()
+
+        self._sock_ingest = None
+        self._sock_bmi = None
+        self._init_sockets()
+
         pass
-    
+
+    def _init_sockets(self) -> None:
+        # ingestor tx/rx
+        self._sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock_ingest.connect(
+            (self._cfg.ingestor.ip, self._cfg.ingestor.listen_port)
+        )
+        self._sock_ingest.bind((self._cfg.ingestor.ip, self._cfg.ingestor.comm_port))
+        self._sock_ingest.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        # bmi tx/rx
+        self._sock_bmi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock_bmi.connect((self._cfg.bmi.ip, self._cfg.bmi.listen_port))
+        self._sock_bmi.bind((self._cfg.bmi.ip, self._cfg.bmi.comm_port))
+        self._sock_bmi.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    def _recv_all(self, sock, size) -> bytes:
+        """ensures that each packet is complete before transmit"""
+        data = b""
+        while len(data) < size:
+            packet = sock.recv(size - len(data))
+            if not packet:
+                return None
+            data += packet
+        return data
 
     def capture(self):
         pass
 
     def transmit(self):
         pass
+
+    def term_listen(self):
+        term_msg = self._recv_all(self._sock_bmi, 10)
+        if term_msg and term_msg.startswith(b"BEGIN STOP"):
+            logger.info("Received termination signal")
+            self._term_flag.set()
 
     def run(self):
         pass
