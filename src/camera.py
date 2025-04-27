@@ -1,128 +1,192 @@
-import collections
+# camera.py
+from __future__ import annotations
+
 import cv2
+
+# print(cv2.getBuildInformation())
+import threading
+import time
 from datetime import datetime, timezone
-import struct
+from typing import Iterable, Tuple, Optional
+
+from buffers import DoubleBuffer
 
 
-# This function returns the syntax necessary for setting up the IR cameras
-def gstreamer_pipeline(sensor_id, width, height):
+# slams out crappy frames as fast as possible
+def gstreamer_dyn_pipeline(sensor_id: int, width: int, height: int, fps: int) -> str:
+    """Jetson CSI → GRAY8 pipeline string optimized for low-latency network transfer."""
     return (
         f"nvarguscamerasrc sensor-id={sensor_id} ! "
-        f"video/x-raw(memory:NVMM), width={width}, height={height}, format=NV12, framerate={framerate}/1 ! "
-        f"nvvidconv flip-method=0 ! "
-        f"video/x-raw, width={width}, height={height}, format=BGRx ! "
+        # f"nvarguscamerasrc sensor-id={sensor_id} num-buffers=150 ! "
+        f"video/x-raw(memory:NVMM), width={width}, height={height}, "
+        f"format=NV12, framerate={fps}/1 ! "
+        # f"nvvidconv flip-method=0 ! "
+        f"nvvidconv flip-method=2 ! "
+        # f"video/x-raw, width={width}, height={height}, format=BGRx ! "
         f"videoconvert ! video/x-raw, format=GRAY8 ! appsink"
     )
 
 
-# This is a function to determine the time since epoch
-unix_epoch = datetime.fromtimestamp(0, timezone.utc)
+# saves mp4 to a predetermined (absolute) path
+def gstreamer_static_pipeline(
+    sensor_id: int, width: int, height: int, fps: int, outpath: str
+) -> str:
+    """Jetson CSI → h264 pipeline string optimized for high quality output file for out-of-band transfer."""
+    return (
+        f"nvarguscamerasrc sensor-id{sensor_id} ! "
+        f"video/x-raw(memory:NVMM),width={width},height={height},framerate={fps}/1 ! "
+        # convert out of NVMM so the overlay element can work
+        f"nvvidconv ! video/x-raw,format=BGRx ! "
+        # overlay buffer-time in h:mm:ss.mmm format
+        f"timeoverlay time-mode=running-time halignment=left valignment=top "
+        'font-desc="Monospace, 28" shaded-background=true ! '
+        # duplicate the annotated stream: one branch goes to file, the other to OpenCV
+        f"tee name=t "
+        f"t. ! queue ! videoconvert ! "
+        f"x264enc speed-preset=ultrafast tune=zerolatency bitrate=8000 ! "
+        f"mp4mux ! filesink location={outpath} sync=false "
+        f"t. ! queue ! videoconvert ! appsink emit-signals=true drop=true"
+    )
 
 
-def unix_time_millis(dt):
-    """formats timestamps as milliseconds-since-epoch (double-precision float, only requires 8 bytes)"""
-    if dt.tzinfo is None:
-        # make dt offset-aware in UTC if it's naive
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        # convert to UTC if it's aware in a different timezone
-        dt = dt.astimezone(timezone.utc)
-    return (dt - unix_epoch).total_seconds() * 1000.0
+FrameRecord = Tuple[bytes, bytes]
 
 
-class camera:
-    def __init__(self, ID, camera_width, camera_height, buffer_length, framerate):
-        self.width = camera_width
-        self.height = camera_height
-        self.ID = ID
+class Camera:
+    """
+    Single-producer / single-consumer camera wrapper using a DoubleBuffer.
 
-        # Current_buffer starts out at one
-        current_buffer = 0
+    Producer: internal thread created by `start()`
+    Consumer: call `.drain()` from any other thread / async task
+    """
 
-        # Initializing camera objects
-        self.cap = cv2.VideoCapture(
-            gstreamer_pipeline(self.ID, self.width, self.height), cv2.CAP_GSTREAMER
+    __slots__ = (
+        "sensor_id",
+        "width",
+        "height",
+        "fps",
+        "output_dir",
+        "_capture_is_static",
+        "_buffer",
+        "_cap",
+        "_stop_event",
+        "_thread",
+    )
+
+    def __init__(
+        self,
+        sensor_id: int,
+        width: int,
+        height: int,
+        *,
+        framerate: int = 30,
+        buffer_seconds: int = 10,
+        output_dir: Optional[str] = None,
+    ) -> None:
+        self.sensor_id = sensor_id
+        self.width = width
+        self.height = height
+        self.fps = framerate
+        self.output_dir = output_dir
+
+        self._capture_is_static = True if output_dir is not None else False
+
+        # capacity = frames per second × seconds per ring
+        capacity = framerate * buffer_seconds
+        self._buffer: DoubleBuffer[FrameRecord] = DoubleBuffer(capacity)
+
+        # if `output_dir` is provided, write frames at that location and tee to cv2
+        self._cap = (
+            cv2.VideoCapture(
+                gstreamer_dyn_pipeline(sensor_id, width, height, framerate),
+                cv2.CAP_GSTREAMER,
+            )
+            if output_dir is None
+            else cv2.VideoCapture(
+                gstreamer_static_pipeline(
+                    sensor_id, width, height, framerate, output_dir
+                ),
+                cv2.CAP_GSTREAMER,
+            )
         )
 
-        # Buffer size is the amount of objects that can be stored in the buffer, and
-        # buffer_length is the amount of time that a buffer should take up
-        self.buffer_size = buffer_length * framerate
+        if not self._cap.isOpened():
+            raise RuntimeError(f"Camera {sensor_id} failed to open")
 
-        # This is the list of buffers
-        self.data_buffer_list = collections.deque()
-        self.meta_buffer_list = collections.deque()
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(
+            target=self._capture_loop, name=f"Cam{sensor_id}", daemon=True
+        )
 
-        # Appending initial buffer to the list of buffers
-        self.data_buffer_list.append(collections.deque(maxlen=self.buffer_size))
-        self.meta_buffer_list.append(collections.deque(maxlen=self.buffer_size))
+    # ------------------------------------------------------------------ API
 
-    def append_data(self):
-        # Setting current buffer
-        current_buffer = len(self.data_buffer_list) - 1
+    def start(self) -> None:
+        self._thread.start()
 
-        # Getting data from camera object
-        ret, frame = self.cap.read()
+    def stop(self) -> None:
+        self._stop_event.set()
+        self._thread.join(timeout=2.0)
+        self._cap.release()
 
-        # Handling case where camera object is unable to read frame
-        if not (ret):
-            print(
-                f"In camera.append_data() -- Unable to grab frame from camera {self.ID}"
-            )
-            return False
+    def drain(self) -> Iterable[FrameRecord]:
+        """Yield all queued (frame, timestamp) pairs in FIFO order."""
+        yield from self._buffer.drain()
 
-        # If a frame is retrieved
+    def pop(self) -> FrameRecord:
+        """Remove and return (frame, timestamp) pair from buffer in FIFO order."""
+        if self._buffer.ready():
+            return self._buffer.pop()
         else:
-            # Getting time of capture metadata
-            time_now = datetime.now()
-            time_since_epoch = unix_time_millis(time_now)
-            time_since_epoch_packed = struct.pack("d", time_since_epoch)
+            pass
 
-            # Time stamp overlay to frames
-            timestamp = time_now.strftime("%Y-%m-%d_%H-%M-%S.%f")[:-3]
-            cv2.putText(
-                frame,
-                timestamp,
-                (10, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2,
-                cv2.LINE_AA,
-            )
+    # ----------------------------------------------------------- internals
 
-            # Flattenning the frame to a byte array for transmission
-            frame_bytes = frame.tobytes()
-
-            # Appending data to current buffer
-            self.data_buffer_list[current_buffer].append(frame_bytes)
-            self.meta_buffer_list[current_buffer].append(time_since_epoch_packed)
-
-            # If the current buffer grows to its max size, increment current_buffer
-            # to indicate using the next buffer
-            if len(self.data_buffer_list[current_buffer]) >= self.buffer_size:
-                self.data_buffer_list.append(collections.deque(maxlen=self.buffer_size))
-                self.meta_buffer_list.append(collections.deque(maxlen=self.buffer_size))
-
-            return True
-
-    def get_data(self):
-        # Only attempt to get data if the bottom buffer has data, and also if there is more than one
-        # buffer in the buffer list
-        # --> This is so that the zeroeth buffer is not both getting filled and taken from at the same time
-        if len(self.data_buffer_list) > 1 and len(self.data_buffer_list[0]) > 0:
-            # Getting data and metadata off the zeroeth buffer
-            data = self.data_buffer_list[0].popleft()
-            metadata = self.meta_buffer_list[0].popleft()
-
-            # If the zeroeth buffer has a length of zero, then pop it off of the buffer list
-            if len(self.data_buffer_list[0] <= 0):
-                self.data_buffer_list.popleft()
-                self.meta_buffer_list.popleft()
-
-            # Return the gathered data
-            return (data, metadata)
-
-        # Case where data cannot be retrieved due to current buffer lengths
+    def _capture_loop(self) -> None:
+        if self._capture_is_static:
+            pass
         else:
-            # Return false to indicate that data was not gathered
-            return False
+            """Producer thread"""
+            frame_interval = 1.0 / self.fps
+            next_frame_time = time.monotonic()
+
+            while not self._stop_event.is_set():
+                # Busy-wait until the next frame deadline
+                sleep_time = next_frame_time - time.monotonic()
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+
+                ret, frame = self._cap.read()
+                # Correct img orientation
+                # frame = cv2.flip(frame, 0)
+
+                next_frame_time += frame_interval
+
+                if not ret:
+                    # Simple error handling: skip this frame
+                    print(f"skipped frame @ ival:{frame_interval}")
+                    continue
+
+                # Generate metadata
+                ts = datetime.now(timezone.utc)
+                # ms_since_epoch = unix_time_millis(ts)
+                ns_since_epoch = time.perf_counter_ns()
+                # ts_packed = struct.pack("d", ms_since_epoch)
+
+                cv2.putText(
+                    frame,
+                    ts.strftime("%H:%M:%S.%f")[:-3],
+                    (10, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (255, 255, 255),
+                    2,
+                )
+
+                try:
+                    self._buffer.put(
+                        (frame.tobytes(), ns_since_epoch), drop_if_full=False
+                    )
+                except BufferError:
+                    # Both rings full and drop_if_full=False → we block
+                    # OR propagate – choose policy appropriate for experiment
+                    pass

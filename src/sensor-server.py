@@ -79,9 +79,10 @@ def data_receiver_task():
     global term_flag
 
     # open output file descriptors for writing:
-    with open(f"{output_path}/sensor1.csv", "w+") as sensor_outfile1, open(
-        f"{output_path}/sensor2.csv", "w+"
-    ) as sensor_outfile2:
+    with (
+        open(f"{output_path}/sensor1.csv", "w+") as sensor_outfile1,
+        open(f"{output_path}/sensor2.csv", "w+") as sensor_outfile2,
+    ):
         logger.info("Opened sensor data files!")
 
         current_sensor = None

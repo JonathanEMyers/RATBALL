@@ -114,9 +114,10 @@ def handleJetson():
     global endTermination
 
     # Open all necessary files (metadata files, audio file, sensor data file, etc.)
-    with open(audioDataFilepath, "wb") as fAudio, open(
-        audioMetaFilepath, "w", newline=""
-    ) as fAudioMeta:
+    with (
+        open(audioDataFilepath, "wb") as fAudio,
+        open(audioMetaFilepath, "w", newline="") as fAudioMeta,
+    ):
         audioWriter = csv.writer(fAudioMeta)
         audioWriter.writerow(
             ["Frame Count", "Reception Time", "Sent Time", "Taken time"]

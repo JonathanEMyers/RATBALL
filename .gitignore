@@ -2,6 +2,9 @@
 .venv/
 __pycache__/
 
+# Transient build directories
+.opencv_build_workspace
+
 # Output/testing artifacts
 *.txt
 *.log
