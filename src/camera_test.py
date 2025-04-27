@@ -10,7 +10,7 @@ tmp_should_stream = False
 
 HOST = "192.168.0.11"
 PORT = 10_000
-OUTPUT_DIR = f"/mnt/extended/data_captures/camera/{datetime.now().strftime("%Y-%m-%d")}"
+OUTPUT_DIR = f"/mnt/extended/data_captures/camera/{datetime.now().strftime('%Y-%m-%d')}"
 
 makedirs(OUTPUT_DIR, exists_ok=True)
 
