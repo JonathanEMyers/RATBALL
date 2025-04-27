@@ -3,9 +3,9 @@
 # NOTE: Only Debian/Ubuntu Linux supported
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-if [[ -z "$SCRIPT_IR" ]] ; then                                                                                                                              │  9 opencv_gst_workdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'opencv_gst_workdir')↵
-    printf '%s\n' 'Could not resolve working directory, exiting!'                                                                                             │ 10 ↵
-    exit 1                                                                                                                                                    │ 11 ↵
+if [[ -z "$SCRIPT_IR" ]] ; then
+    printf '%s\n' 'Could not resolve working directory, exiting!'
+    exit 1
 fi
 
 version="4.10.0"
