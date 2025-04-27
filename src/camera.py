@@ -143,7 +143,16 @@ class Camera:
 
     def _capture_loop(self) -> None:
         if self._capture_is_static:
-            pass
+            ret, frame = self._cap.read()
+            if not ret:
+                print(f"[static pipeline] no frame available yet, continuing")
+            try:
+                ns_since_epoch = time.perf_counter_ns()
+                self._buffer.put(
+                    (frame.tobytes(), ns_since_epoch), drop_if_full=False
+                )
+            except BufferError:
+                pass
         else:
             """Producer thread"""
             frame_interval = 1.0 / self.fps
@@ -190,3 +199,4 @@ class Camera:
                     # Both rings full and drop_if_full=False → we block
                     # OR propagate – choose policy appropriate for experiment
                     pass
+
