@@ -24,6 +24,10 @@ sensor:
   i2c_addr:
     - 0x17
     - 0x67
+camera:
+  ident:
+    - 0
+    - 1
 data_paths:
   sensor: /mnt/extended/data_capture/sensor
   camera: /mnt/extended/data_capture/camera
