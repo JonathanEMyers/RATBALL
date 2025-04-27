@@ -2,7 +2,7 @@ import numpy as np
 import sounddevice as sd
 import time
 
-class speaker:
+class Speaker:
     def __init__(self, frequency, samplerate, blocksize, update_rate):
         self.frequency = frequency
         self.samplerate = samplerate
