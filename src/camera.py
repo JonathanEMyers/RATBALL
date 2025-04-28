@@ -166,12 +166,11 @@ class Camera:
         self._thread.join(timeout=2.0)
         self._cap.release()
 
-    # ------------------------------------------------------------------ API (chunked file transmit strategy)
+    # ------------------------------------------------------------------ API (chunked video transfer strategy)
 
-    
+        # TODO: send fixed-interval mkv or mp4 video chunks
 
-
-    # ------------------------------------------------------------------ API (single-frame transmit strategy)
+    # ------------------------------------------------------------------ API (per-frame transfer strategy)
 
     def drain(self) -> Iterable[FrameRecord]:
         """Yield all queued (frame, timestamp) pairs in FIFO order."""
@@ -238,3 +237,4 @@ class Camera:
                     # Both rings full and drop_if_full=False → we block
                     # OR propagate – choose policy appropriate for experiment
                     pass
+
