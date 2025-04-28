@@ -6,6 +6,7 @@ from config import RatballConfig
 from sensor import Sensor
 from speaker import Speaker
 from camera import Camera
+import socket
 
 
 class SensorGovernor(Thread):
@@ -35,14 +36,14 @@ class SensorGovernor(Thread):
         self._sock_ingest.connect(
             (self._cfg.ingestor.ip, self._cfg.ingestor.listen_port)
         )
-        self._sock_ingest.bind((self._cfg.ingestor.ip, self._cfg.ingestor.comm_port))
         self._sock_ingest.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock_ingest.sendall()
 
         # bmi tx/rx
         self._sock_bmi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock_bmi.connect((self._cfg.bmi.ip, self._cfg.bmi.listen_port))
-        self._sock_bmi.bind((self._cfg.bmi.ip, self._cfg.bmi.comm_port))
         self._sock_bmi.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock_bmi.sendall()
 
     def _recv_all(self, sock, size) -> bytes:
         """ensures that each packet is complete before transmit"""
@@ -126,8 +127,8 @@ class SpeakerGovernor(Thread):
         # bmi tx/rx
         self._sock_bmi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock_bmi.connect((self._cfg.bmi.ip, self._cfg.bmi.listen_port))
-        self._sock_bmi.bind((self._cfg.bmi.ip, self._cfg.bmi.comm_port))
         self._sock_bmi.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock_bmi.sendall()
 
     def listen(self):
         self.speaker.start()
@@ -175,14 +176,14 @@ class CameraGovernor(Thread):
         self._sock_ingest.connect(
             (self._cfg.ingestor.ip, self._cfg.ingestor.listen_port)
         )
-        self._sock_ingest.bind((self._cfg.ingestor.ip, self._cfg.ingestor.comm_port))
         self._sock_ingest.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock_ingest.sendall()
 
         # bmi tx/rx
         self._sock_bmi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock_bmi.connect((self._cfg.bmi.ip, self._cfg.bmi.listen_port))
-        self._sock_bmi.bind((self._cfg.bmi.ip, self._cfg.bmi.comm_port))
         self._sock_bmi.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock_bmi.sendall()
 
     def _recv_all(self, sock, size) -> bytes:
         """ensures that each packet is complete before transmit"""
@@ -195,10 +196,14 @@ class CameraGovernor(Thread):
         return data
 
     def transmit(self):
+
         while not self._tx_complete.is_set():
             if not self._term_flag.is_set():
+                for camera in self._manifest:
+                    camera.start()
+            
 
-        pass
+
 
     def term_listen(self):
         term_msg = self._recv_all(self._sock_bmi, 10)
