@@ -1,5 +1,0 @@
-pyalsaaudio
-pyyaml
-numpy
-sounddevice
-opencv-python

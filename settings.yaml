@@ -1,0 +1,36 @@
+ingestor:
+  ip: 127.0.0.1
+  listen_port: 36783
+jetson:
+  ip: 127.0.0.1
+  ingest_comm_port: 36784
+  bmi_comm_port: 36786
+bmi:
+  ip: 127.0.0.1
+  comm_port: 36785
+  listen_port: 36787
+buffer:
+  buffer_length: 10
+  framerate: 30
+audio:
+  channels: 1
+  format: S16_LE
+  rate: 44100
+speaker:
+  channels: 1
+  block_size: 4096
+  amplitude: .5
+sensor:
+  i2c_addr:
+    - 0x17
+    - 0x67
+camera:
+  ident:
+    - 0
+    - 1
+data_paths:
+  sensor: /mnt/extended/data_capture/sensor
+  camera: /mnt/extended/data_capture/camera
+  audio: /mnt/extended/data_capture/audio
+  logs: /mnt/extended/data_capture/logs
+
