@@ -114,16 +114,15 @@ class SpeakerGovernor(Thread):
         self._term_flag = Event()
         self.speaker = Speaker(0, self._cfg.audio.rate, self._cfg.speaker.block_size, self._cfg.buffer.framerate)
 
-        self._sock_ingest = None
         self._sock_bmi = None
-        self._init_sockets()
+        self._init_socket()
 
         self._thread_pool = [
             # listen thread runs in background, daemonize to exit when enq/tx threads die
             Thread(target=self.listen, name="_speaker_listen", daemon=True),
         ]
 
-    def _init_sockets(self) -> None:
+    def _init_socket(self) -> None:
         # bmi tx/rx
         self._sock_bmi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock_bmi.connect((self._cfg.bmi.ip, self._cfg.bmi.listen_port))
