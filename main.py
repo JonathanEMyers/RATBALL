@@ -1,5 +1,6 @@
 import struct
 from threading import Thread, Event
+from datetime import datetime
 from loguru import logger
 from config import RatballConfig
 from sensor import Sensor
@@ -118,12 +119,19 @@ class SpeakerGovernor(Thread):
         self._init_sockets()
 
         self._thread_pool = [
-            Thread(target=self.run, name="_speaker_run"),
             # listen thread runs in background, daemonize to exit when enq/tx threads die
             Thread(target=self.listen, name="_speaker_listen", daemon=True),
         ]
 
+    def _init_sockets(self) -> None:
+        # bmi tx/rx
+        self._sock_bmi = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock_bmi.connect((self._cfg.bmi.ip, self._cfg.bmi.listen_port))
+        self._sock_bmi.bind((self._cfg.bmi.ip, self._cfg.bmi.comm_port))
+        self._sock_bmi.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
     def listen(self):
+        self.speaker.start()
         term_msg = self._recv_all(self._sock_bmi, 10)
         # If the received message is the stop program indicator message
         if term_msg and term_msg.startswith(b"BEGIN STOP"):
@@ -139,7 +147,10 @@ class SpeakerGovernor(Thread):
             self.speaker.set_frequency(speaker_frequency)
 
     def run(self):
-        self.speaker.run()
+        for thread in self._thread_pool:
+            thread.start()
+        for thread in self._thread_pool:
+            thread.join()
 
 
 class CameraGovernor(Thread):
@@ -148,6 +159,10 @@ class CameraGovernor(Thread):
         self._cfg = RatballConfig()
         self._tx_complete = Event()
         self._term_flag = Event()
+
+        # capture_id is unique per experiment, but shared by each Camera
+        capture_id = datetime.now().strftime("%y%m%d_%H%M")
+        self._manifest = [Camera(ident, capture_id) for ident in self._cfg.camera.ident]
 
         self._sock_ingest = None
         self._sock_bmi = None
@@ -180,10 +195,10 @@ class CameraGovernor(Thread):
             data += packet
         return data
 
-    def capture(self):
-        pass
-
     def transmit(self):
+        while not self._tx_complete.is_set():
+            if not self._term_flag.is_set():
+
         pass
 
     def term_listen(self):
