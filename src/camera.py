@@ -7,6 +7,7 @@ import cv2
 import threading
 import time
 from datetime import datetime, timezone
+from os import makedirs
 from typing import Iterable, Tuple, Optional
 
 from buffers import DoubleBuffer
@@ -90,10 +91,12 @@ class Camera:
 
     __slots__ = (
         "sensor_id",
+        "capture_id",
         "width",
         "height",
         "fps",
         "output_dir",
+        "frame_ival_multiplier",
         "_outpath",
         "_capture_is_static",
         "_buffer",
@@ -105,20 +108,24 @@ class Camera:
     def __init__(
         self,
         sensor_id: int,
+        capture_id: str,
         width: int,
         height: int,
         framerate: int = 30,
         buffer_seconds: int = 10,
         output_dir: Optional[str] = None,
+        frame_ival_multiplier = 2,
     ) -> None:
         self.sensor_id = sensor_id
+        self.capture_id = capture_id
         self.width = width
         self.height = height
         self.fps = framerate
         self.output_dir = output_dir
+        self.frame_ival_multiplier = frame_ival_multiplier
 
         self._outpath = (
-            f"{output_dir}/cam{sensor_id}" if output_dir is not None else None
+            f"{output_dir}/{capture_id}_cam{sensor_id}" if output_dir is not None else None
         )
 
         self._capture_is_static = True if output_dir is not None else False
@@ -150,7 +157,6 @@ class Camera:
             target=self._capture_loop, name=f"Cam{sensor_id}", daemon=True
         )
 
-    # ------------------------------------------------------------------ API
 
     def start(self) -> None:
         self._thread.start()
@@ -159,6 +165,13 @@ class Camera:
         self._stop_event.set()
         self._thread.join(timeout=2.0)
         self._cap.release()
+
+    # ------------------------------------------------------------------ API (chunked file transmit strategy)
+
+    
+
+
+    # ------------------------------------------------------------------ API (single-frame transmit strategy)
 
     def drain(self) -> Iterable[FrameRecord]:
         """Yield all queued (frame, timestamp) pairs in FIFO order."""
@@ -185,7 +198,7 @@ class Camera:
                 pass
         else:
             """Producer thread"""
-            frame_interval = 1.0 / self.fps
+            frame_interval = 2.0 / self.fps
             next_frame_time = time.monotonic()
 
             while not self._stop_event.is_set():
