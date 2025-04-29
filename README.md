@@ -10,64 +10,69 @@ The RATBALL sensor array consists of two I2C optical odometry and tracking senso
 - Jetson Linux R36 (JetPack >=6.0)
 - [`uv` Python package/project manager](https://github.com/astral-sh/uv)
 - OpenCV `4.10.0` compiled with GStreamer capability 
-  - [Installation script available](https://github.com/RATBALL-Org/RATBALL/blob/main/scripts/install_opencv_with_gstreamer_cap.sh) [TODO: attribute derivative source]
+  - [Installation script available](https://github.com/RATBALL-Org/RATBALL/blob/main/scripts/install_opencv_with_gstreamer_cap.sh) [TODO: credit original source]
 
 
 ## Installation
-(0.) If OpenCV is already installed on your system, make sure that it was compiled with GStreamer support:
+#### OpenCV
+If OpenCV is already installed on your system, make sure that it was compiled with GStreamer support:
 ```python
 import cv2
 print(cv2.getBuildInformation())
+```  
+Running the above script should print out all compilation options enabled for your build. Under the "Video I/O" header, you should see a line indicating whether or not GStreamer capability is enabled:
 ```
-If your build supports GStreamer, running the above script should output build information containing indicating GStreamer capability (under the "Video I/O" header), i.e.:
+GStreamer:                   YES (1.26.0)
 ```
-    GStreamer:                   YES (1.26.0)
-```
+If the ouput is "YES", you're good to go!
+
+
 <details>
-<summary>What to do if your OpenCV build lacks GStreamer support</summary>
+<summary>*What to do if your OpenCV build lacks GStreamer support* (click to expand)</summary>
 
-If the OpenCV build information reports "NO" for GStreamer support, you will need to run the provided installer script to compile and build a compatible OpenCV version by navigating your shell to the root directory of the repo and running the following command:
-```sh
-./scripts/install_opencv_with_gstreamer_cap.sh
-```
+1. Run the provided installer script to compile and build a compatible OpenCV version by navigating your shell to the root directory of the repo and running the following command:
+    ```sh
+    ./scripts/install_opencv_with_gstreamer_cap.sh
+    ```
+    The script will prompt a Y/N response on whether you would like to remove any existing opencv distribution packages (strongly recommended).
 
-The script will prompt a Y/N response on whether you would like to remove any existing opencv distribution packages (strongly recommended).
+2. Source the following file in your active shell to update values for the `$LD_LIBRARY_PATH` and `$PYTHONPATH` environment variables, i.e.:
+    ```sh
+    source ./scripts/opencv_paths.profile
+    ```
 
-Finally, source the following file in the active shell to set the correct values for the `$LD_LIBRARY_PATH` and `$PYTHONPATH` environment variables, i.e.:
-```sh
-source ./scripts/opencv_paths.profile
-```
+	_Optional:_  
+    To persist environment variable updates after the current shell session ends, append the profile file to your shell's `.*rc` file.
+    ```sh
+    # For single-user BASH:
+    cat ./scripts/opencv_paths.profile >> $HOME/.profile
 
-To persist changes to these environment variables beyond the current shell session, the profile file may be appended to your shell RC file, i.e.:
-```sh
-# For single-user BASH:
-cat ./scripts/opencv_paths.profile >> $HOME/.profile
+    # For single-user ZSH:
+    cat ./scripts/opencv_paths.profile >> $HOME/.zprofile
 
-# For single-user ZSH:
-cat ./scripts/opencv_paths.profile >> $HOME/.zprofile
+    # System-wide (not recommended):
+    cat ./scripts/opencv_paths.profile >> /etc/profile
+    ```
 
-# System-wide (not recommended):
-cat ./scripts/opencv_paths.profile >> /etc/profile
-```
-
-Finally, you'll need to permit `uv` to use the system `site-packages` installation of OpenCV by running the following command at repo root:
-```sh
-sed -i 's/include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg
-```
+3. Permit `uv` to use the system `site-packages` installation of OpenCV by running the following command from the repo root directory:
+    ```sh
+    sed -i 's/include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg
+    ```
 
 At this point, the output of `cv2.getBuildInformation()` should report that GStreamer support is enabled!
 
 </details>
 
+---
+#### Project
 
 1. Run the client entrypoint (`uv run` automatically initializes a project-local virtual environment and installs dependencies):
-```sh
-uv run main.py
-```
+    ```sh
+    uv run main.py
+    ```
 
-2. Run the server entrypoint:
-[TODO]
-
+2. Run the server entrypoint:  
+   [TODO]
 
 ## Client Architecture
 [TODO: 1-line summary]
