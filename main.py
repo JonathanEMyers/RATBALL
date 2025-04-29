@@ -4,11 +4,11 @@ from datetime import datetime
 import sys
 import socket
 from loguru import logger
-from config import RatballConfig
+from src.config import RatballConfig
 # custom classes
-from sensor import Sensor
-from speaker import Speaker
-from camera import Camera
+from src.sensor import Sensor
+from src.speaker import Speaker
+from src.camera import Camera
 
 
 class SensorGovernor(Thread):
