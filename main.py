@@ -1,6 +1,7 @@
 import struct
 from threading import Thread, Event
 from datetime import datetime
+import sys
 import socket
 from loguru import logger
 from config import RatballConfig
