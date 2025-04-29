@@ -1,7 +1,7 @@
 # RATBALL Telemetry Client
 
 ## Background
-This repo consists of a Python client for collecting, annotating, transmitting, and terminating odometric, visual, and audial data streams originating from the RATBALL (Research and Training Behavioral Analysis Locomation Lab) omni-directional treadmill platform for use in neurological imaging studies of head-fixed laboratory mice.
+This repo consists of a Python client for collecting, annotating, transmitting, and terminating odometric, visual, and audial data streams originating from the RATBALL (Research and Training Behavioral Analysis Locomotion Lab) omni-directional treadmill platform for use in neurological imaging studies of head-fixed laboratory mice.
 
 The RATBALL sensor array consists of two I2C optical tracking odometry sensors (Sparkfun, PixArt PAA5160E1), two CSI/MIPI near-IR/visible light cameras (Seeed Studio IMX219-160 8MP), and support for a speaker for audio playback.
 
