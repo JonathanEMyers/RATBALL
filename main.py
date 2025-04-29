@@ -81,6 +81,7 @@ class SensorGovernor(Thread):
         while not self._tx_complete.is_set():
             if not self._term_flag.is_set():
                 for idx, sensor in enumerate(self._manifest):
+                    # continue popping data from buffer until empty
                     metadata, data = sensor.get_next()
                     if data is not None:
                         packet = self._pack_motion_data(metadata, data, idx)

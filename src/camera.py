@@ -13,7 +13,8 @@ from typing import Iterable, Tuple, Optional
 from buffers import DoubleBuffer
 
 
-# slams out crappy frames as fast as possible
+# slams out low resolution frames as fast as possible
+# current approach being used
 def gstreamer_dyn_pipeline(sensor_id: int, width: int, height: int, fps: int) -> str:
     """Jetson CSI → GRAY8 pipeline string (semi-)optimized for low-latency network transfer."""
     return (
@@ -26,6 +27,7 @@ def gstreamer_dyn_pipeline(sensor_id: int, width: int, height: int, fps: int) ->
 
 
 # saves mp4 to a predetermined (absolute) path
+# for future use if desired, may need addtl testing
 def gstreamer_static_pipeline_mp4(
     sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
 ) -> str:
@@ -52,6 +54,8 @@ def gstreamer_static_pipeline_mp4(
 
 
 # saves mkv to a predetermined (absolute) path
+# for future use if desired, may need addtl testing
+# appears to work better than .mp4
 def gstreamer_static_pipeline_mkv(
     sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
 ) -> str:
@@ -168,7 +172,7 @@ class Camera:
 
     # ------------------------------------------------------------------ API (chunked video transfer strategy)
 
-        # TODO: send fixed-interval mkv or mp4 video chunks
+        # TODO: implement transmission of video chunks as fixed-length .mp4 or .mkv files
 
     # ------------------------------------------------------------------ API (per-frame transfer strategy)
 
