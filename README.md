@@ -23,17 +23,21 @@ If your build supports GStreamer, running the above script should output build i
 ```
     GStreamer:                   YES (1.26.0)
 ```
-If this instead reports "NO", you will need to run the provided installer script to compile and build a compatible OpenCV version by navigating your shell to the root directory of the repo and running the following command:
+<details>
+<summary>What to do if your OpenCV build lacks GStreamer support</summary>
+
+If the OpenCV build information reports "NO" for GStreamer support, you will need to run the provided installer script to compile and build a compatible OpenCV version by navigating your shell to the root directory of the repo and running the following command:
 ```sh
 ./scripts/install_opencv_with_gstreamer_cap.sh
 ```
 
-The script will prompt a Y/N response on whether you would like to remove any existing opencv distribution packages; this is strongly recommended.
+The script will prompt a Y/N response on whether you would like to remove any existing opencv distribution packages (strongly recommended).
 
 Finally, source the following file in the active shell to set the correct values for the `$LD_LIBRARY_PATH` and `$PYTHONPATH` environment variables, i.e.:
 ```sh
 source ./scripts/opencv_paths.profile
 ```
+
 To persist changes to these environment variables beyond the current shell session, the profile file may be appended to your shell RC file, i.e.:
 ```sh
 # For single-user BASH:
@@ -44,8 +48,17 @@ cat ./scripts/opencv_paths.profile >> $HOME/.zprofile
 
 # System-wide (not recommended):
 cat ./scripts/opencv_paths.profile >> /etc/profile
-
 ```
+
+Finally, you'll need to permit `uv` to use the system `site-packages` installation of OpenCV by running the following command at repo root:
+```sh
+sed -i 's/include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg
+```
+
+At this point, the output of `cv2.getBuildInformation()` should report that GStreamer support is enabled!
+
+</details>
+
 
 1. Run the client entrypoint (`uv run` automatically initializes a project-local virtual environment and installs dependencies):
 ```sh
