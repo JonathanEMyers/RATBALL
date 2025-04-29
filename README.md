@@ -75,7 +75,9 @@ At this point, the output of `cv2.getBuildInformation()` should report that GStr
    [TODO]
 
 ## Client Architecture
-[TODO: 1-line summary]
+[TODO: Review and finalize 1-line summary]
+
+Modular, event-driven client built on decoupled producer–consumer pipelines for high-throughput sensor, camera, and audio streaming over TCP/IP.
 
 ### Architectural Diagram
 [TODO: diagram, desc.]
