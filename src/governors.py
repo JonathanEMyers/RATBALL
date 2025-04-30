@@ -3,6 +3,7 @@ import socket
 import sys
 from multiprocessing import Process, Queue, Event
 from datetime import datetime
+from loguru import logger
 
 from .config import RatballConfig
 from .sensor import Sensor
@@ -20,7 +21,14 @@ class SensorGovernor(Process):
         self._tx_complete = Event()
         self._term_flag = Event()
 
-        self._manifest = [Sensor(addr) for addr in self._cfg.sensor.i2c_addr]
+        self._manifest = None
+        try:
+            self._manifest = [Sensor(addr) for addr in self._cfg.sensor.i2c_addr]
+        except:
+            logger.critical(
+                    f"Fatal exception occurred while building sensor manifest for I2C addresses {self._cfg.sensor.i2c_addr}"
+            )
+            self._manifest = []
 
         self._sock_ingest = None
         self._sock_bmi = None
@@ -44,7 +52,7 @@ class SensorGovernor(Process):
         # ingestor tx/rx
         try:
             self._sock_ingest.connect(
-                (self._cfg.ingestor.ip, self._cfg.ingestor.listen_port)
+                (self._cfg.ingestor.ip, self._cfg.ingestor.gateway_port)
             )
             self._sock_ingest.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         except ex:

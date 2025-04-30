@@ -1,9 +1,13 @@
 import sys
+import argparse
 from loguru import logger
 
 from src.config import RatballConfig
 from src.governors import SensorGovernor, SpeakerGovernor, CameraGovernor
+from src.ingestor import IngestorService
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--ingestor", help="run the Ingestor service", action="store_true")
 
 def init_logger():
     # remove default log handler
@@ -17,7 +21,7 @@ def init_logger():
     logger.add(RatballConfig().data_paths.logs, rotation="200 MB", compression="zip")
 
 
-def main():
+def run_ratball_client():
     init_logger()
 
     sensor_gov = SensorGovernor()
@@ -29,6 +33,19 @@ def main():
     camera_gov = CameraGovernor()
     camera_gov.run()
 
+
+def run_ingestor_service():
+    ingestor_srv = IngestorService()
+    ingestor_srv.start()
+
+def main():
+    args = parser.parse_args()
+    if args.ingestor:
+        logger.info("Starting Ingestor service")
+        run_ingestor_service()
+    else:
+        logger.info("Starting RATBALL client")
+        run_ratball_client()
 
 if __name__ == "__main__":
     main()

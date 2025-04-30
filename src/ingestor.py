@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import socket
 import struct
+import sys
+
+from loguru import logger
 from queue import PriorityQueue
 from dataclasses import dataclass
 from threading import Thread, Event
-from ..config import RatballConfig
+from .config import RatballConfig
 
 
 # RATBALL Ingestor Server
@@ -14,7 +18,7 @@ from ..config import RatballConfig
 #
 # Also listens for termination signal from BMI server, upon which:
 #  - Socket connections are closed and other transient system resources are freed
-#  - Data file post-processing is performed (i.e. chunked video collation, frame decomposition, CSV data statistics, etc.)
+#  - Data file post-processing may be performed (i.e. chunked video collation, frame decomposition, CSV data statistics, etc.)
 # 
 # Inbound connections are accepted on a single port, then per-device socket listeners are
 # negotiated following successful receipt of the following salutory payload:
@@ -43,19 +47,14 @@ class PrioritizedGvnrConn:
     priority: int
     item: DeviceGovernorConnection(compare=False)
 
-class IngestorWorker(Thread):
-    def __init__(self, *args, **kwargs):
-        super(IngestorWorker, self).__init__(*args, **kwargs)
+class IngestorService:
+    def __init__(self):
+        super().__init__()
         self._cfg = RatballConfig()
 
-        self._current_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # TODO: set up listener
-        self._current_sock.bind((
-            '0.0.0.0',
-            8888,
-        ))
-
-        self._next_device_port = 42_000
+        self._gateway_sock = None
+        self._next_device_port = self._cfg.ingestor.data_port_range_start
+        self._init_gateway_socket()
 
         # priority queue of inbound device connections
         self.connection_pqueue = PriorityQueue()
@@ -64,11 +63,22 @@ class IngestorWorker(Thread):
         self._term_flag = Event()
 
         self._thread_pool = [
+            Thread(target=self.queue_inbound_clients, name="_lst_client_"),
             Thread(target=self.consume_camera_feed, name="_rx_camera_"),
             Thread(target=self.consume_sensor_feed, name="_rx_sensor_"),
         ]
 
-    def get_next_device_port(self):
+    def _init_gateway_socket(self):
+        """Initialize the gateway socket and begin listening for client connections"""
+        self._current_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._current_sock.bind((
+            '0.0.0.0',
+            self._cfg.ingestor.gateway_port,
+        ))
+        self._current_sock.listen()
+
+    def _get_next_device_port(self):
+        """Return the next available data port number, then increment it"""
         port = self._next_device_port
         self._next_device_port += 1
         return port
@@ -92,9 +102,8 @@ class IngestorWorker(Thread):
             logger.error(f"Failed to unpack client hello payload: {error}")
             pass
 
-
     def _accept_new_conn(self):
-        """accepts device connections, assigns each device a socket in a priority queue, sends ack to client"""
+        """Accept device connection, assign that device a socket in a priority queue, then send handshake to client"""
         conn, addr = self._current_sock.accept()
         logger.info(f"Connection from: {addr}")
 
@@ -125,15 +134,15 @@ class IngestorWorker(Thread):
             conn.send(
                 struct.pack(server_handshake_binfmt, assigned_socket.getsockname()[1])
             )
-            # TODO: may not be needed with listen()
+
+            # clean up and reset for new client connections
             conn.close()
+            self._init_gateway_socket()
 
-            # TODO: renew entrypoint socket
-
-
-    def _event_loop(self):
-        pass
-
+    def queue_inbound_clients(self):
+        logger.info("Listening for inbound clients to queue")
+        while True:
+            self._accept_new_conn()
 
     def consume_camera_feed(self):
         pass
@@ -142,12 +151,10 @@ class IngestorWorker(Thread):
         pass
 
     def start(self):
-        pass
+        for thread in self._thread_pool:
+            thread.start()
+        for thread in self._thread_pool:
+            thread.join()
 
     def stop(self):
         pass
-
-    def run(self):
-        pass
-
-

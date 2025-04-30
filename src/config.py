@@ -18,19 +18,17 @@ except ImportError:  # pragma: no cover – PyPy / pure-Python envs
 @dataclass(frozen=True, slots=True)
 class IngestorConfig:
     ip: str
-    listen_port: int
-
-
-@dataclass(frozen=True, slots=True)
-class JetsonConfig:
-    ip: str
-    ingest_comm_port: int
-    bmi_comm_port: int
+    gateway_port: int
+    data_port_range_start: int
+    data_port_range_end: int
 
 
 @dataclass(frozen=True, slots=True)
 class BMIConfig:
     ip: str
+    gateway_port: int
+    data_port_range_start: int
+    data_port_range_end: int
     comm_port: int
     listen_port: int
 
@@ -95,7 +93,6 @@ class RatballConfig:
         raw_cfg = self._read_settings_yaml()
 
         self.ingestor: IngestorConfig = IngestorConfig(**raw_cfg["ingestor"])
-        self.jetson: JetsonConfig = JetsonConfig(**raw_cfg["jetson"])
         self.bmi: BMIConfig = BMIConfig(**raw_cfg["bmi"])
         self.buffer: BufferConfig = BufferConfig(**raw_cfg["buffer"])
         self.audio: AudioConfig = AudioConfig(**raw_cfg["audio"])
@@ -131,7 +128,6 @@ class RatballConfig:
         # assert required top-level keys exist
         required_keys = {
             "ingestor",
-            "jetson",
             "bmi",
             "buffer",
             "audio",
@@ -147,3 +143,4 @@ class RatballConfig:
             )
 
         return data
+
