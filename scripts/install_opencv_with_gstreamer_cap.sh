@@ -45,7 +45,7 @@ sudo apt-get install -y curl
 echo "------------------------------------"
 echo "⇒ Download OpenCV "${version}" (step 2/4)"
 echo "------------------------------------"
-mkdir $opencv_gst_workdir
+mkdir -p $opencv_gst_workdir
 pushd ${opencv_gst_workdir}
 curl -L https://github.com/opencv/opencv/archive/${version}.zip -o opencv-${version}.zip
 curl -L https://github.com/opencv/opencv_contrib/archive/${version}.zip -o opencv_contrib-${version}.zip
@@ -75,6 +75,7 @@ cmake -D WITH_CUDA=ON \
       -D CMAKE_BUILD_TYPE=RELEASE \
       -D CMAKE_INSTALL_PREFIX=/usr/local ..
 make -j$(nproc)
+sudo make install
 
 popd
 popd
@@ -83,7 +84,6 @@ popd
 echo "------------------------------------"
 echo "** Install OpenCV "${version}" (4/4)"
 echo "------------------------------------"
-sudo make install
 touch $opencv_profile_path
 echo 'export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH' >> $opencv_profile_path
 echo 'export PYTHONPATH=/usr/local/lib/python3.10/site-packages/:$PYTHONPATH' >> $opencv_profile_path
