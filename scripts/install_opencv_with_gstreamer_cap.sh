@@ -3,7 +3,7 @@
 # NOTE: Only Debian/Ubuntu Linux supported
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-if [[ -z "$SCRIPT_IR" ]] ; then
+if [[ -z "$SCRIPT_DIR" ]] ; then
     printf '%s\n' 'Could not resolve working directory, exiting!'
     exit 1
 fi
