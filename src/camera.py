@@ -1,9 +1,6 @@
-# camera.py
 from __future__ import annotations
 
 import cv2
-
-# print(cv2.getBuildInformation())
 import threading
 import time
 from datetime import datetime, timezone
@@ -13,8 +10,7 @@ from typing import Iterable, Tuple, Optional
 from buffers import DoubleBuffer
 
 
-# slams out low resolution frames as fast as possible
-# current approach being used
+# slams out low-resolution frames as fast as possible
 def gstreamer_dyn_pipeline(sensor_id: int, width: int, height: int, fps: int) -> str:
     """Jetson CSI → GRAY8 pipeline string (semi-)optimized for low-latency network transfer."""
     return (
@@ -27,7 +23,6 @@ def gstreamer_dyn_pipeline(sensor_id: int, width: int, height: int, fps: int) ->
 
 
 # saves mp4 to a predetermined (absolute) path
-# for future use if desired, may need addtl testing
 def gstreamer_static_pipeline_mp4(
     sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
 ) -> str:
@@ -54,8 +49,6 @@ def gstreamer_static_pipeline_mp4(
 
 
 # saves mkv to a predetermined (absolute) path
-# for future use if desired, may need addtl testing
-# appears to work better than .mp4
 def gstreamer_static_pipeline_mkv(
     sensor_id: int, width: int, height: int, fps: int, outpath: str, bitrate: int = 2000
 ) -> str:
@@ -172,7 +165,7 @@ class Camera:
 
     # ------------------------------------------------------------------ API (chunked video transfer strategy)
 
-        # TODO: implement transmission of video chunks as fixed-length .mp4 or .mkv files
+        # TODO: send fixed-interval mkv or mp4 video chunks
 
     # ------------------------------------------------------------------ API (per-frame transfer strategy)
 
@@ -223,15 +216,16 @@ class Camera:
                 ns_since_epoch = time.perf_counter_ns()
                 # ts_packed = struct.pack("d", ms_since_epoch)
 
-                cv2.putText(
-                    frame,
-                    ts.strftime("%H:%M:%S.%f")[:-3],
-                    (10, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (255, 255, 255),
-                    2,
-                )
+                # Disabling for now in favor of gstreamer `timeoverlay`
+                # cv2.putText(
+                #     frame,
+                #     ts.strftime("%H:%M:%S.%f")[:-3],
+                #     (10, 40),
+                #     cv2.FONT_HERSHEY_SIMPLEX,
+                #     1,
+                #     (255, 255, 255),
+                #     2,
+                # )
 
                 try:
                     self._buffer.put(
