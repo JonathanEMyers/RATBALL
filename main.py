@@ -1,17 +1,18 @@
 import struct
-from threading import Thread, Event
-from datetime import datetime
-import sys
 import socket
+import sys
+# from threading import Thread, Event
+from multiprocessing import Process, Queue, Event
+from datetime import datetime
 from loguru import logger
+
 from src.config import RatballConfig
-# custom classes
 from src.sensor import Sensor
 from src.speaker import Speaker
 from src.camera import Camera
 
 
-class SensorGovernor(Thread):
+class SensorGovernor(Process):
     def __init__(self):
         # init governor thread superconstructor
         super(SensorGovernor, self).__init__(self)
@@ -28,10 +29,10 @@ class SensorGovernor(Thread):
 
         # initialize sensor threads
         self._thread_pool = [
-            Thread(target=self.enqueue, name="_sensor_enq_"),
-            Thread(target=self.transmit, name="_sensor_tx_"),
+            Process(target=self.enqueue, name="_sensor_enq_"),
+            Process(target=self.transmit, name="_sensor_tx_"),
             # listen thread runs in background, daemonize to exit when enq/tx threads die
-            Thread(target=self.term_listen, name="_sensor_lst_", daemon=True),
+            Process(target=self.term_listen, name="_sensor_lst_", daemon=True),
         ]
 
     def _init_sockets(self) -> None:
@@ -82,7 +83,6 @@ class SensorGovernor(Thread):
         while not self._tx_complete.is_set():
             if not self._term_flag.is_set():
                 for idx, sensor in enumerate(self._manifest):
-                    # continue popping data from buffer until empty
                     metadata, data = sensor.get_next()
                     if data is not None:
                         packet = self._pack_motion_data(metadata, data, idx)
@@ -118,7 +118,7 @@ class SensorGovernor(Thread):
             thread.join()
 
 
-class SpeakerGovernor(Thread):
+class SpeakerGovernor(Process):
     def __init__(self):
         super(SpeakerGovernor, self).__init__(self)
         self._cfg = RatballConfig()
@@ -130,7 +130,7 @@ class SpeakerGovernor(Thread):
 
         self._thread_pool = [
             # listen thread runs in background, daemonize to exit when enq/tx threads die
-            Thread(target=self.listen, name="_speaker_listen", daemon=True),
+            Process(target=self.listen, name="_speaker_listen", daemon=True),
         ]
 
     def _init_socket(self) -> None:
@@ -175,7 +175,7 @@ class SpeakerGovernor(Thread):
             thread.join()
 
 
-class CameraGovernor(Thread):
+class CameraGovernor(Process):
     def __init__(self):
         super(CameraGovernor, self).__init__(self)
         self._cfg = RatballConfig()
