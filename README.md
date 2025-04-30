@@ -10,7 +10,7 @@ The RATBALL sensor array consists of two I2C optical tracking odometry sensors (
 - Jetson Linux R36 (JetPack >=6.0)
 - [`uv` Python package/project manager](https://github.com/astral-sh/uv)
 - OpenCV `4.10.0` compiled with GStreamer capability 
-  - [Installation script available](https://github.com/RATBALL-Org/RATBALL/blob/main/scripts/install_opencv_with_gstreamer_cap.sh) [TODO: credit original source]
+  - [Installation script available](https://github.com/RATBALL-Org/RATBALL/blob/main/scripts/install_opencv_with_gstreamer_cap.sh) 
 
 
 ## Installation
