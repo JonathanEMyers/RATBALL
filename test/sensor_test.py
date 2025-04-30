@@ -30,9 +30,10 @@ class SensorPlotter():
     def run(self, i):
         vecs = [self._sensor_data.pos, self._sensor_data.vel]
         for j, line in enumerate(self.lines):
-            for x, y, _ in vecs[j]:
-                line.set_data(self._sensor_data.time, x)
-                line.set_data(self._sensor_data.time, y)
+            vec = vecs[j]
+            line.set_data(self._sensor_data.time, vec.x)
+            line.set_data(self._sensor_data.time, vec.y)
+
             line.axes.relim()
             line.axes.autoscale_view()
 
