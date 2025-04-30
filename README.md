@@ -28,7 +28,7 @@ If the ouput is "YES", you're good to go!
 
 
 <details>
-<summary>*What to do if your OpenCV build lacks GStreamer support* (click to expand)</summary>
+<summary><strong>What to do if your OpenCV build lacks GStreamer support</strong> <em>(click to expand)</em></summary>
 
 1. Run the provided installer script to compile and build a compatible OpenCV version by navigating your shell to the root directory of the repo and running the following command:
     ```sh
