@@ -71,18 +71,22 @@ At this point, the output of `cv2.getBuildInformation()` should report that GStr
     uv run main.py
     ```
 
-2. Run the server entrypoint:  
-   [TODO]
+2. Run the Ingestor service entrypoint:  
+   ```sh
+   uv run main.py --ingestor
+   ```
 
 ## Client Architecture
-[TODO: Review and finalize 1-line summary]
+<!-- [TODO: Review and finalize 1-line summary] -->
 
 Modular, event-driven client built on decoupled producer–consumer pipelines for high-throughput sensor, camera, and audio streaming over TCP/IP.
 
 ### Architectural Diagram
-[TODO: diagram, desc.]
 
-### Data capture
+![RATBALL_System_Overview2](https://github.com/user-attachments/assets/cf4d3c72-9e6b-46e9-883b-9ff9e60b81be)
+
+<!--
+### Data Capture and Audio Playback
 [TODO: desc.]
 
 ### Event loop
@@ -100,4 +104,4 @@ Modular, event-driven client built on decoupled producer–consumer pipelines fo
 
 ## Acknowledgments
 [TODO]
-
+-->
