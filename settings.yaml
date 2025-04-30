@@ -32,5 +32,5 @@ data_paths:
   sensor: /mnt/extended/data_capture/sensor
   camera: /mnt/extended/data_capture/camera
   audio: /mnt/extended/data_capture/audio
-  logs: /mnt/extended/data_capture/logs
+  logs: /mnt/extended/data_capture/ratball.log
 

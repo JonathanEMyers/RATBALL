@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from os import makedirs
 from typing import Iterable, Tuple, Optional
 
-from buffers import DoubleBuffer
+from .buffers import DoubleBuffer
 
 
 # slams out low-resolution frames as fast as possible

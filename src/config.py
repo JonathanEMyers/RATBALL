@@ -100,8 +100,8 @@ class RatballConfig:
         self.buffer: BufferConfig = BufferConfig(**raw_cfg["buffer"])
         self.audio: AudioConfig = AudioConfig(**raw_cfg["audio"])
         self.speaker: SpeakerConfig = SpeakerConfig(**raw_cfg["speaker"])
-        self.sensor: SensorConfig = SensorConfig(tuple(**raw_cfg["sensor"]["i2c_addr"]))
-        self.camera: CameraConfig = CameraConfig(tuple(**raw_cfg["camera"]["ident"]))
+        self.sensor: SensorConfig = SensorConfig(tuple(raw_cfg["sensor"]["i2c_addr"]))
+        self.camera: CameraConfig = CameraConfig(tuple(raw_cfg["camera"]["ident"]))
         # cast data-path strings to Path for safer downstream use
         self.data_paths: DataPathsConfig = DataPathsConfig(
             **{k: Path(v) for k, v in raw_cfg["data_paths"].items()}

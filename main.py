@@ -15,7 +15,7 @@ from src.camera import Camera
 class SensorGovernor(Process):
     def __init__(self):
         # init governor thread superconstructor
-        super(SensorGovernor, self).__init__(self)
+        super().__init__()
         self._cfg = RatballConfig()
         # start thread events
         self._tx_complete = Event()
