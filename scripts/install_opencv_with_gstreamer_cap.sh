@@ -19,7 +19,7 @@ set -e
 for (( ; ; ))
 do
     echo "Do you want to remove the default OpenCV (yes/no)?"
-    echo "('Y' will run apt purge to remove all *libopencv* packages)" 
+    echo "('yes' will run apt purge to remove all *libopencv* packages)" 
     read rm_old
 
     if [ "$rm_old" = "yes" ]; then
@@ -32,9 +32,7 @@ do
 done
 
 
-echo "------------------------------------"
-echo "⇒ Install dependencies (step 1/4)"
-echo "------------------------------------"
+echo "⇒ Installing dependencies (step 1/4)"
 sudo apt-get update
 sudo apt-get install -y build-essential cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev
 sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev python3.10-dev python3-numpy
@@ -42,9 +40,7 @@ sudo apt-get install -y libtbb2 libtbb-dev libjpeg-dev libpng-dev libtiff-dev li
 sudo apt-get install -y curl
 
 
-echo "------------------------------------"
-echo "⇒ Download OpenCV "${version}" (step 2/4)"
-echo "------------------------------------"
+echo "⇒ Downloading OpenCV "${version}" (step 2/4)"
 mkdir -p $opencv_gst_workdir
 pushd ${opencv_gst_workdir}
 curl -L https://github.com/opencv/opencv/archive/${version}.zip -o opencv-${version}.zip
@@ -55,9 +51,7 @@ rm opencv-${version}.zip opencv_contrib-${version}.zip
 pushd opencv-${version}/
 
 
-echo "------------------------------------"
-echo "⇒ Build OpenCV "${version}" (step 3/4)"
-echo "------------------------------------"
+echo "⇒ Building OpenCV "${version}""
 mkdir release
 pushd release/
 cmake -D WITH_CUDA=ON \
@@ -81,9 +75,9 @@ popd
 popd
 popd
 
-echo "------------------------------------"
-echo "** Install OpenCV "${version}" (4/4)"
-echo "------------------------------------"
+rm -r $opencv_gst_workdir
+
+echo "⇒ Installing OpenCV "${version}" (4/4)"
 touch $opencv_profile_path
 echo 'export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH' >> $opencv_profile_path
 echo 'export PYTHONPATH=/usr/local/lib/python3.10/site-packages/:$PYTHONPATH' >> $opencv_profile_path
@@ -95,4 +89,5 @@ echo "      To add to the current shell, run:"
 echo "          source ${opencv_profile_path}"
 echo "      To permanently add to the environment, redirect to your shell rc file, e.g.:"
 echo "          cat ${opencv_profile_path} > $HOME/.bashrc"
+
 
