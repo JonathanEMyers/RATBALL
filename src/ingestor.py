@@ -151,12 +151,12 @@ class IngestorService:
             )
             if device == 'sensor':
                 logger.info(f"Adding new thread to thread pool for sensor{ident}, ts={ts}")
-                t = Thread(target=self.consume_sensor_feed, name=f"_rx_sensor_{len(self._thread_pool)}_", daemon=True),
+                t = Thread(target=self.consume_sensor_feed, name=f"_rx_sensor_{len(self._thread_pool)}_", daemon=True)
                 self._thread_pool.append(t)
                 t.start()
             if device == 'camera':
                 logger.info(f"Adding new thread to thread pool for camera{ident}, ts={ts}")
-                t = Thread(target=self.consume_camera_feed, name=f"_rx_camera_{len(self._thread_pool)}_", daemon=True),
+                t = Thread(target=self.consume_camera_feed, name=f"_rx_camera_{len(self._thread_pool)}_", daemon=True)
                 self._thread_pool.append(t)
                 t.start()
 
