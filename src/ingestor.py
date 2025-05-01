@@ -13,6 +13,7 @@ from typing import Deque
 from dataclasses import dataclass
 from threading import Thread, Event
 from .config import RatballConfig
+from .utils import safe_unwrap_exception
 
 
 # RATBALL Ingestor Server
@@ -77,13 +78,17 @@ class IngestorService:
 
     def _init_gateway_socket(self):
         """Initialize the gateway socket and begin listening for client connections"""
-        self._gateway_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._gateway_sock.bind((
-            '',
-            self._cfg.ingestor.gateway_port,
-        ))
-        self._gateway_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._gateway_sock.listen()
+        try:
+            self._gateway_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._gateway_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._gateway_sock.bind((
+                '',
+                self._cfg.ingestor.gateway_port,
+            ))
+            self._gateway_sock.listen()
+        except socket.error as ex:
+            exmsg = safe_unwrap_exception(ex)
+            logger.error(f"Socket error occurred while reinitializing gateway socket: {exmsg}")
 
     def _get_next_device_port(self):
         """Return the next available data port number, then increment it"""
