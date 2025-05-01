@@ -74,8 +74,8 @@ class SensorGovernor(Process):
                 self._sock_ingest.sendall(
                     build_client_hello('sensor', ident)
                 )
-            except ex:
-                logger.error(f"Exception occurred while sending hello packet to Ingestor for device sensor{ident}: {ex}")
+            except:
+                logger.error(f"Exception occurred while sending hello packet to Ingestor for device sensor{ident}")
 
             try:
                 next_port = self._sock_ingest.recv(
