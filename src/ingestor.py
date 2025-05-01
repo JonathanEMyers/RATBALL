@@ -185,7 +185,7 @@ class IngestorService:
 
         # keep receiving data for the lifetime of the thread
         while True:
-            sensor_data_bin = sock.recv(data_pkt_size)
+            sensor_data_bin = conn.recv(data_pkt_size)
             ts, x, y, h, idx = struct.unpack(
                 self._cfg.sensor.binfmt,
                 sensor_data_bin,
