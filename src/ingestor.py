@@ -95,13 +95,10 @@ class IngestorService:
             self._cfg.ingestor.client_hello_binfmt
         )
         try:
-            hello = b""
-            while len(hello) < client_hello_len:
-                payload = conn.recv(client_hello_len - len(hello))
-                if not payload:
-                    return None
-                hello += payload
-            return hello
+            payload = conn.recv(client_hello_len - len(hello))
+            if not payload:
+                raise Exception("Got empty payload for client hello packet")
+            return payload
         except Exception as ex:
             exmsg = ex.message if hasattr(ex, 'message') else ex
             logger.error(f"Exception occurred while accepting new connection: {exmsg}")
@@ -123,7 +120,7 @@ class IngestorService:
 
         hello = self._recv_client_hello(conn)
         if hello is not None:
-            device, ident, ts = hello
+            device, ident, ts = self._unpack_client_hello(hello)
             logger.info(f"Got client hello with device={device}, ident={ident}, ts={ts}")
             dt = time.now()*1000 - ts
 
