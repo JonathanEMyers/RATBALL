@@ -59,7 +59,7 @@ class SensorGovernor(Process):
                 (self._cfg.ingestor.ip, self._cfg.ingestor.gateway_port)
             )
             self._sock_ingest.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        except Exception as ex:
+        except socket.error as ex:
             exmsg = safe_unwrap_exception(ex)
             logger.error(f"Exception occurred while connecting to Ingestor: {exmsg}")
 
@@ -67,7 +67,7 @@ class SensorGovernor(Process):
         try:
             self._sock_bmi.connect((self._cfg.bmi.ip, self._cfg.bmi.listen_port))
             self._sock_bmi.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        except Exception as ex:
+        except socket.error as ex:
             exmsg = safe_unwrap_exception(ex)
             logger.error(f"Exception occurred while connecting to BMI: {exmsg}")
 
@@ -77,7 +77,7 @@ class SensorGovernor(Process):
                 self._sock_ingest.sendall(
                     build_client_hello('sensor', ident)
                 )
-            except Exception as ex:
+            except socket.error as ex:
                 exmsg = safe_unwrap_exception(ex)
                 logger.error(f"Exception occurred while sending hello packet to Ingestor for device sensor{ident}: {exmsg}")
 
@@ -97,7 +97,7 @@ class SensorGovernor(Process):
                     logger.critical(f"Ingestor responded with client handshake value outside of expected range: {next_port}")
                     self._sock_ingest.close()
                     raise Exception("Ingestor stream connection could not be established, aborting")
-            except Exception as ex:
+            except socket.error as ex:
                 exmsg = safe_unwrap_exception(ex)
                 logger.error(f"Exception occurred while receiving client handshake from Ingestor for sensor{ident}: {ex}")
 
@@ -146,7 +146,7 @@ class SensorGovernor(Process):
                             continue
                         try:
                             self._sock_ingest.sendall(packet)
-                        except Exception as ex:
+                        except socket.error as ex:
                             exmsg = safe_unwrap_exception(ex)
                             logger.critical(
                                 f"Error sending packet with timestamp `{metadata}`: {exmsg}"
