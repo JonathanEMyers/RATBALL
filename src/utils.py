@@ -15,21 +15,6 @@ def unix_time_millis(dt: float) -> float:
     return (dt - unix_epoch).total_seconds() * 1000.0
 
 
-def build_client_hello(device_name: str, device_ident: int) -> bytes:
-    try:
-        device_name_enc = device_name.encode(encoding="ascii")
-        if len(device_name_enc) != 6:
-            logger.critical(f"Got invalid size for encoded device name: {len(device_name_enc)}")
-            raise Exception(f"Failed to build client hello for device {device_name} with ident {ident}")
-        return struct.pack(">6sId", device_name_enc, device_ident, unix_time_millis(dt.now()))
-    except struct.error as ex:
-        exmsg = safe_unwrap_exception(ex)
-        logger.error(f"Struct error occurred while building client hello packet for device {device_name}{device_ident}: {exmsg}")
-    except Exception as ex:
-        exmsg = safe_unwrap_exception(ex)
-        logger.error(f"Exception occurred while building client hello for device {device_name}{device_ident}: {exmsg}")
-
-
 def safe_unwrap_exception(ex: Optional[Exception]) -> str:
     if ex is None:
         return "Unknown exception occurred."
