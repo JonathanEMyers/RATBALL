@@ -122,7 +122,7 @@ class SensorGovernor(Process):
                 logger.error(f"Socket error occurred while receiving client handshake from Ingestor for sensor{ident}: {exmsg}")
             except Exception as ex:
                 exmsg = safe_unwrap_exception(ex)
-                logger.error("Exception occurred while receiving client handshake from Ingestor for sensor{ident}: {exmsg}")
+                logger.error(f"Exception occurred while receiving client handshake from Ingestor for sensor{ident}: {exmsg}")
 
 
 
