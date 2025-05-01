@@ -11,11 +11,11 @@ parser.add_argument("--ingestor", help="run the Ingestor service", action="store
 
 
 logger_format = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</> | "
-    "<level><bold>{level: <8}</></> | "
-    "<cyan>{name}</>:<cyan>{function}</>:<purple>{line}</> | "
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level><bold>{level: <8}</bold></level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<purple>{line}</purple> | "
     "<level>{message}</level>"
-    "\n<red>{exception}</>"
+    "\n<red>{exception}</red>"
 )
 
 def init_logger(is_multiprocess: bool = False) -> None:
