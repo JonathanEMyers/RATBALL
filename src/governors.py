@@ -105,7 +105,7 @@ class SensorGovernor(Process):
                     struct.calcsize(self._cfg.ingestor.handshake_binfmt)
                 )
                 try:
-                    next_port = struct.unpack(self._cfg.ingestor.handshake_binfmt, next_port_payload)
+                    next_port = struct.unpack(self._cfg.ingestor.handshake_binfmt, next_port_payload)[0]
                 except struct.error as ex:
                     exmsg = safe_unwrap_exception(ex)
                     logger.critical(f"Struct error occurred while unpacking Ingestor handshake port: {exmsg}")
