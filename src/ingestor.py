@@ -160,6 +160,8 @@ class IngestorService:
             # clean up and reset for new client connections
             conn.close()
             self._init_gateway_socket()
+        else:
+            logger.warning(f"Did not receive hello packet from client at {addr}")
 
     def queue_inbound_clients(self):
         logger.info("Listening for inbound clients to queue")
