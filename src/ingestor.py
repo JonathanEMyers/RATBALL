@@ -4,6 +4,7 @@ from operator import itemgetter
 import socket
 import struct
 import sys
+from datetime import datetime
 
 from loguru import logger
 from queue import PriorityQueue
@@ -122,7 +123,7 @@ class IngestorService:
         if hello is not None:
             device, ident, ts = self._unpack_client_hello(hello)
             logger.info(f"Got client hello with device={device}, ident={ident}, ts={ts}")
-            dt = time.now()*1000 - ts
+            dt = datetime.now()*1000 - ts
 
             # create and bind a new socket at a precomputed port
             assigned_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -193,7 +194,7 @@ class IngestorService:
                 device_type, ident, created_ts, sock = itemgetter('device_type', 'ident', 'created_ts', 'sock')(
                     dev_conn_wrapped['items']
                 )
-                dt = time.now()*1000 - created_ts
+                dt = datetime.now()*1000 - created_ts
                 # if the device isn't what we're looking for, reprioritize and re-enqueue it
                 if device_type != 'sensor':
                     self.connection_pool.put(
