@@ -28,12 +28,11 @@ class SensorPlotter():
         self.ani = FuncAnimation(plt.gcf(), self.run, interval = 10, repeat=True)
 
     def run(self, i):
-        vecs = [self._sensor_data.pos, self._sensor_data.vel]
-        for j, line in enumerate(self.lines):
-            vec = vecs[j]
-            line.set_data(self._sensor_data.time, vec.x)
-            line.set_data(self._sensor_data.time, vec.y)
-
+        self.lines[0].set_data([t for t in self._sensor_data.time], [sd.x for sd in self._sensor_data.pos])
+        self.lines[1].set_data([t for t in self._sensor_data.time], [sd.y for sd in self._sensor_data.pos])
+        self.lines[2].set_data([t for t in self._sensor_data.time], [sd.x for sd in self._sensor_data.vel])
+        self.lines[3].set_data([t for t in self._sensor_data.time], [sd.y for sd in self._sensor_data.vel])
+        for line in self.lines:
             line.axes.relim()
             line.axes.autoscale_view()
 
@@ -41,9 +40,9 @@ class SensorPlotter():
 
 @dataclass(frozen=True, slots=True)
 class SensorData():
-    time = [float]
-    pos = qwiic_otos.Pose2D
-    vel = qwiic_otos.Pose2D
+    time: [float]
+    pos: [qwiic_otos.Pose2D]
+    vel: [qwiic_otos.Pose2D]
 
 
 class SensorPoll(threading.Thread):
@@ -59,8 +58,10 @@ class SensorPoll(threading.Thread):
 
     def run(self):
         while True:
-            pos, vel = self.device.getPosVelAcc()
-            self._sensor_data.time.append(unix_time_millis(datetime.now()))
+            pos, vel, _ = self.device.getPosVelAcc()
+            self._sensor_data.time.append(
+                unix_time_millis(datetime.now())
+            )
             self._sensor_data.pos.append(pos)
             self._sensor_data.vel.append(vel)
 
@@ -69,7 +70,7 @@ class SensorPoll(threading.Thread):
 
 
 
-data = SensorData()
+data = SensorData([],[],[])
 plotter = SensorPlotter(data)
 poller = SensorPoll(data, 0x17)
 
