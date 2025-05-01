@@ -129,6 +129,7 @@ class IngestorService:
             # create and bind a new socket at a precomputed port
             assigned_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             assigned_socket.bind(('', self.get_next_device_port()))
+            assigned_socket.listen()
 
             # place the device descriptor + assigned socket into queue
             self.connection_pool.put(
