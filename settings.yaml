@@ -3,7 +3,7 @@ ingestor:
   gateway_port: 9595
   data_port_range_start: 30000
   data_port_range_end: 42000
-  client_hello_binfmt: '>sId'
+  client_hello_binfmt: '>6sId'
   handshake_binfmt: '>H'
 bmi:
   ip: 127.0.0.1
