@@ -102,8 +102,9 @@ class IngestorService:
                     return None
                 hello += payload
             return hello
-        except:
-            logger.error(f"Exception occurred while accepting new connection")
+        except Exception as ex:
+            exmsg = ex.message if hasattr(ex, 'message') else ex
+            logger.error(f"Exception occurred while accepting new connection: {exmsg}")
 
     def _unpack_client_hello(self, hello: bytes) -> Tuple[str, int, float]:
         try:
@@ -112,10 +113,8 @@ class IngestorService:
                 hello
             )
         except Exception as ex:
-            if hasattr(ex, 'message'):
-                logger.critical(f"Exception occurred while unpacking payload: {ex.message}")
-            logger.error(f"Failed to unpack client hello payload: {ex}")
-            pass
+            exmsg = ex.message if hasattr(ex, 'message') else ex
+            logger.critical(f"Exception occurred while unpacking client hello payload: {exmsg}")
 
     def _accept_new_conn(self):
         """Accept device connection, assign that device a socket in a priority queue, then send handshake to client"""

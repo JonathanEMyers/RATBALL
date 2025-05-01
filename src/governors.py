@@ -27,9 +27,10 @@ class SensorGovernor(Process):
         self._manifest = None
         try:
             self._manifest = [Sensor(addr) for addr in self._cfg.sensor.i2c_addr]
-        except:
+        except Exception as ex:
+            exmsg = ex.message if hasattr(ex, 'message') else ex
             logger.critical(
-                    f"Fatal exception occurred while building sensor manifest for I2C addresses {self._cfg.sensor.i2c_addr}"
+                    f"Fatal exception occurred while building sensor manifest for I2C addresses {self._cfg.sensor.i2c_addr}: {exmsg}"
             )
             self._manifest = []
 
@@ -58,15 +59,17 @@ class SensorGovernor(Process):
                 (self._cfg.ingestor.ip, self._cfg.ingestor.gateway_port)
             )
             self._sock_ingest.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        except:
-            logger.error(f"Exception occurred while connecting to Ingestor")
+        except Exception as ex:
+            exmsg = ex.message if hasattr(ex, 'message') else ex
+            logger.error(f"Exception occurred while connecting to Ingestor: {exmsg}")
 
         # bmi tx/rx
         try:
             self._sock_bmi.connect((self._cfg.bmi.ip, self._cfg.bmi.listen_port))
             self._sock_bmi.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        except:
-            logger.error(f"Exception occurred while connecting to BMI")
+        except Exception as ex:
+            exmsg = ex.message if hasattr(ex, 'message') else ex
+            logger.error(f"Exception occurred while connecting to BMI: {exmsg}")
 
     def _client_handshake(self) -> None:
         for ident, _ in enumerate(self._manifest):
@@ -74,8 +77,9 @@ class SensorGovernor(Process):
                 self._sock_ingest.sendall(
                     build_client_hello('sensor', ident)
                 )
-            except:
-                logger.error(f"Exception occurred while sending hello packet to Ingestor for device sensor{ident}")
+            except Exception as ex:
+                exmsg = ex.message if hasattr(ex, 'message') else ex
+                logger.error(f"Exception occurred while sending hello packet to Ingestor for device sensor{ident}: {exmsg}")
 
             try:
                 next_port = self._sock_ingest.recv(
@@ -93,8 +97,9 @@ class SensorGovernor(Process):
                     logger.critical(f"Ingestor responded with client handshake value outside of expected range: {next_port}")
                     self._sock_ingest.close()
                     raise Exception("Ingestor stream connection could not be established, aborting")
-            except:
-                logger.error(f"Exception occurred while receiving client handshake from Ingestor for sensor{ident}")
+            except Exception as ex:
+                exmsg = ex.message if hasattr(ex, 'message') else ex
+                logger.error(f"Exception occurred while receiving client handshake from Ingestor for sensor{ident}: {ex}")
 
 
     def _recv_all(self, sock, size) -> bytes:
@@ -142,10 +147,9 @@ class SensorGovernor(Process):
                         try:
                             self._sock_ingest.sendall(packet)
                         except Exception as ex:
-                            if hasattr(ex, 'message'):
-                                logger.critical("Exception occurred while sending data: {ex.message}")
-                            logger.error(
-                                f"Error sending packet with timestamp `{metadata}`: {e}"
+                            exmsg = ex.message if hasattr(ex, 'message') else ex
+                            logger.critical(
+                                f"Error sending packet with timestamp `{metadata}`: {exmsg}"
                             )
                     else:
                         logger.debug(f"No data, metadata was: {metadata}")
