@@ -13,7 +13,7 @@ parser.add_argument("--ingestor", help="run the Ingestor service", action="store
 logger_format = (
     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
     "<level><bold>{level: <8}</bold></level> | "
-    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<purple>{line}</purple> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<magenta>{line}</magenta> | "
     "<level>{message}</level>"
     "\n<red>{exception}</red>"
 )
