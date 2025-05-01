@@ -9,6 +9,15 @@ from src.ingestor import IngestorService
 parser = argparse.ArgumentParser()
 parser.add_argument("--ingestor", help="run the Ingestor service", action="store_true")
 
+
+logger_format = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</> | "
+    "<level><bold>{level: <8}</></> | "
+    "<cyan>{name}</>:<cyan>{function}</>:<purple>{line}</> | "
+    "<level>{message}</level>"
+    "\n<red>{exception}</>"
+)
+
 def init_logger(is_multiprocess: bool = False) -> None:
     # remove default log handler
     logger.remove()
@@ -16,7 +25,7 @@ def init_logger(is_multiprocess: bool = False) -> None:
     # log to both stderr/console and a rotating+compressed log file (capped at 200 MB)
     logger.add(
         sys.stderr,
-        format="{time} | <level><bold>{level}</></> | <cyan>{thread}</> | <red>{exception}</> | {message}",
+        format=logger_format,
         enqueue=is_multiprocess,
     )
     logger.add(RatballConfig().data_paths.logs, rotation="200 MB", compression="zip")
