@@ -1,6 +1,7 @@
 import struct
 from datetime import timezone, datetime as dt
 from loguru import logger
+from typing import Optional
 
 unix_epoch = dt.fromtimestamp(0, timezone.utc)
 def unix_time_millis(dt: float) -> float:
@@ -20,4 +21,11 @@ def build_client_hello(device_name: str, device_ident: int) -> bytes:
     except ex:
         logger.error(f"Exception occurred while packing client hello packet for device {device_name}{device_ident}: {ex}")
 
+
+def safe_unwrap_exception(ex: Optional[Exception]) -> str:
+    if hasattr(ex, 'message'):
+        return ex.message
+    if ex is not None:
+        return ex
+    return "Unknown exception occurred."
 
