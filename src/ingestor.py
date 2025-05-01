@@ -78,8 +78,6 @@ class IngestorService:
         # begin with one listener thread; thread pool will grow with # of clients
         self._thread_pool = [
             Thread(target=self.queue_inbound_clients, name="_lst_client_"),
-#            Thread(target=self.consume_camera_feed, name="_rx_camera_"),
-#            Thread(target=self.consume_sensor_feed, name="_rx_sensor_"),
         ]
         self.sensor_data: Deque = deque()
 
@@ -221,7 +219,6 @@ class IngestorService:
     def _write_sensor_data(self):
         # write data from queue for the lifetime of the thread
         while True:
-            logger.debug(f"In write thread; data buffer length is {len(self.sensor_data)}")
             if len(self.sensor_data) > 0:
                 with (
                     open(os.path.join(self._data_dir, 'sensor0.csv'), 'w+') as s1_outfile,
@@ -235,7 +232,6 @@ class IngestorService:
                             s0_outfile.write(nextrow)
                         case 1:
                             s1_outfile.write(nextrow)
-
 
     def consume_sensor_feed(self):
         while True:
@@ -269,14 +265,13 @@ class IngestorService:
                 else:
                     logger.info(f"Spawning thread to begin writing data stream from {device_type}{ident}")
                     conn, addr = sock.accept()
-                    #t = Thread(target=self._recv_sensor_data, name=f"_recv_sensor_{len(self._thread_pool)}_", args=[conn], daemon=True)
-                    t = Thread(target=self._write_sensor_data, name=f"_write_sensor_{len(self._thread_pool)}_", daemon=True)
-                    self._thread_pool.append(t)
-                    t.start()
+                    recv_t = Thread(target=self._recv_sensor_data, name=f"_recv_sensor_{len(self._thread_pool)}_", args=[conn], daemon=True)
+                    write_t = Thread(target=self._write_sensor_data, name=f"_write_sensor_{len(self._thread_pool)}_", daemon=True)
+                    self._thread_pool.extend([recv_t, write_t])
+                    recv_t.start()
+                    write_t.start()
+                    logger.info(f"Current thread pool allocations: {len(self._thread_pool)}")
 
-
-
-        pass
 
     def start(self):
         for thread in self._thread_pool:
