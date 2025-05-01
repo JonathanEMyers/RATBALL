@@ -88,7 +88,7 @@ class SensorGovernor(Process):
 
 
     def _is_valid_data_port(self, portno: int):
-        return self._cfg.ingestor.data_port_range_start <= int(portno) < self._cfg.ingestor_data_port_range_end
+        return self._cfg.ingestor.data_port_range_start <= int(portno) < self._cfg.ingestor.data_port_range_end
 
     def _client_handshake(self) -> None:
         for ident, _ in enumerate(self._manifest):
@@ -104,17 +104,18 @@ class SensorGovernor(Process):
                 next_port_payload = self._sock_ingest.recv(
                     struct.calcsize(self._cfg.ingestor.handshake_binfmt)
                 )
-                next_port = int.from_bytes(next_port_payload, "big")
+                next_port = struct.unpack(self._cfg.ingestor.handshake_binfmt, next_port_payload)
                 if self._is_valid_data_port(next_port):
                     logger.info(f"Got client handshake from Ingestor, sending sensor{ident} stream to port {next_port}")
                     self._sock_ingest.close()
                     self._sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self._sock_ingest.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     self._sock_ingest.connect(
                         (self._cfg.ingestor.ip, next_port)
                     )
                     self._client_ready.set()
                 else:
-                    logger.critical(f"Ingestor responded with client handshake value outside of expected range: {next_port}")
+                    logger.critical(f"Ingestor responded to client handshake with out-of-bounds destination port: {next_port}")
                     self._sock_ingest.close()
                     raise Exception("Ingestor stream connection could not be established, aborting")
             except socket.error as ex:
