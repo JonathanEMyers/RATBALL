@@ -69,7 +69,7 @@ class SensorGovernor(Process):
             self._sock_bmi.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         except socket.error as ex:
             exmsg = safe_unwrap_exception(ex)
-            logger.error(f"Exception occurred while connecting to BMI: {exmsg}")
+            logger.error(f"Socket error occurred while connecting to BMI: {exmsg}")
 
 
     def _is_valid_data_port(self, portno: int):
@@ -83,7 +83,7 @@ class SensorGovernor(Process):
                 )
             except socket.error as ex:
                 exmsg = safe_unwrap_exception(ex)
-                logger.error(f"Exception occurred while sending hello packet to Ingestor for device sensor{ident}: {exmsg}")
+                logger.error(f"Socket error occurred while sending hello packet to Ingestor for device sensor{ident}: {exmsg}")
 
             try:
                 next_port_payload = self._sock_ingest.recv(
@@ -104,7 +104,11 @@ class SensorGovernor(Process):
                     raise Exception("Ingestor stream connection could not be established, aborting")
             except socket.error as ex:
                 exmsg = safe_unwrap_exception(ex)
-                logger.error(f"Exception occurred while receiving client handshake from Ingestor for sensor{ident}: {ex}")
+                logger.error(f"Socket error occurred while receiving client handshake from Ingestor for sensor{ident}: {exmsg}")
+            except Exception as ex:
+                exmsg = safe_unwrap_exception(ex)
+                logger.error("Exception occurred while receiving client handshake from Ingestor for sensor{ident}: {exmsg}")
+
 
 
     def _recv_all(self, sock, size) -> bytes:
