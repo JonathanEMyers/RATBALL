@@ -182,17 +182,30 @@ class IngestorService:
 
     def _recv_sensor_data(self, conn):
         data_pkt_size = struct.calcsize(self._cfg.sensor.binfmt)
-
         # keep receiving data for the lifetime of the thread
         while True:
-            sensor_data_bin = conn.recv(data_pkt_size)
+            sensor_data_bin = b""
+            try:
+                while len(sensor_data_bin) < data_pkt_size:
+                    packet = conn.recv(data_pkt_size - len(sensor_data_bin))
+                    if not packet:
+                        break
+                    sensor_data_bin += packet
+            except socket.error as ex:
+                exmsg = safe_unwrap_exception(ex)
+                logger.error(f"Socket error occurred while receiving sensor data: {exmsg}")
+
             logger.debug(f"Received {len(sensor_data_bin)} byte sensor data packet")
-            ts, x, y, h, idx = struct.unpack(
-                self._cfg.sensor.binfmt,
-                sensor_data_bin,
-            )
-            payload = SensorPacketPayload(ts, x, y, h, idx)
-            self.sensor_data.append(payload)
+            try:
+                ts, x, y, h, idx = struct.unpack(
+                    self._cfg.sensor.binfmt,
+                    sensor_data_bin,
+                )
+                payload = SensorPacketPayload(ts, x, y, h, idx)
+                self.sensor_data.append(payload)
+            except struct.error as ex:
+                exmsg = safe_unwrap_exception(ex)
+                logger.error(f"Struct error occurred while deserializing sensor data packet: {exmsg}")
 
 
     def consume_sensor_feed(self):
