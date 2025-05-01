@@ -186,6 +186,7 @@ class IngestorService:
         # keep receiving data for the lifetime of the thread
         while True:
             sensor_data_bin = conn.recv(data_pkt_size)
+            logger.debug(f"Received {len(sensor_data_bin)} byte sensor data packet")
             ts, x, y, h, idx = struct.unpack(
                 self._cfg.sensor.binfmt,
                 sensor_data_bin,
