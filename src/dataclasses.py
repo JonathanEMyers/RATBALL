@@ -15,5 +15,5 @@ class SensorPacketPayload:
         return getattr(self, item)
 
     def __str__(self):
-        return f"SensorPacketPayload[idx: {idx} | ts: {ts} | x:{x}, y:{y}, h:{h}]"
+        return f"SensorPacketPayload[idx: {self.idx} | ts: {self.ts} | x:{self.x}, y:{self.y}, h:{self.h}]"
 
