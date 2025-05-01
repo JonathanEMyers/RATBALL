@@ -222,6 +222,7 @@ class IngestorService:
                 dt = time.time()*1000 - created_ts
                 # if the device isn't what we're looking for, reprioritize and re-enqueue it
                 if device_type != 'sensor':
+                    logger.info(f"Returning device {device_type}{ident} to connection pool with priority {dt}")
                     self.connection_pool.put(
                         (
                             # prioritize according to delta w/ incoming connection timestamp
@@ -237,8 +238,11 @@ class IngestorService:
 
                 # if it is, accept connection on socket and begin reading to CSV
                 else:
+                    logger.info(f"Spawning thread to begin consuming data stream from {device_type}{ident}")
                     conn, addr = sock.accept()
-                    self._recv_sensor_data(conn)
+                    t = Thread(target=self._recv_sensor_data, name=f"_recv_sensor_{len(self._thread_pool)}_", args=[conn], daemon=True)
+                    self._thread_pool.append(t)
+                    t.start()
 
 
 
