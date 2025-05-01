@@ -23,9 +23,9 @@ def build_client_hello(device_name: str, device_ident: int) -> bytes:
 
 
 def safe_unwrap_exception(ex: Optional[Exception]) -> str:
+    if ex is None:
+        return "Unknown exception occurred."
     if hasattr(ex, 'message'):
         return ex.message
-    if ex is not None:
-        return ex
-    return "Unknown exception occurred."
+    return ex
 
