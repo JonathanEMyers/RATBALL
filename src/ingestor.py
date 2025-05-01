@@ -71,7 +71,7 @@ class IngestorService:
 #            Thread(target=self.consume_camera_feed, name="_rx_camera_"),
 #            Thread(target=self.consume_sensor_feed, name="_rx_sensor_"),
         ]
-        self.sensor_data: Deque[SensorPacketPayload] = deque()
+        self.sensor_data: Deque = deque()
 
 
     def _init_gateway_socket(self):
