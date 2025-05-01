@@ -4,11 +4,11 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class SensorPacketPayload:
-    ts = float
-    x = float
-    y = float
-    h = float
-    idx = int
+    ts: float
+    x: float
+    y: float
+    h: float
+    idx: int
 
     # implement to make instances subscriptable:
     def __getitem__(self, item):
