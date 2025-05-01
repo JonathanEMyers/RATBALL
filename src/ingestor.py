@@ -78,7 +78,7 @@ class IngestorService:
         """Initialize the gateway socket and begin listening for client connections"""
         self._current_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._current_sock.bind((
-            '0.0.0.0',
+            '',
             self._cfg.ingestor.gateway_port,
         ))
         self._current_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
