@@ -9,7 +9,7 @@ from src.ingestor import IngestorService
 parser = argparse.ArgumentParser()
 parser.add_argument("--ingestor", help="run the Ingestor service", action="store_true")
 
-def init_logger():
+def init_logger(is_multiprocess: bool = False) -> None:
     # remove default log handler
     logger.remove()
 
@@ -17,12 +17,13 @@ def init_logger():
     logger.add(
         sys.stderr,
         format="{time} | <level><bold>{level}</></> | <cyan>{thread}</> | <red>{exception}</> | {message}",
+        enqueue=is_multiprocess,
     )
     logger.add(RatballConfig().data_paths.logs, rotation="200 MB", compression="zip")
 
 
 def run_ratball_client():
-    init_logger()
+    init_logger(is_multiprocess=True)
 
     sensor_gov = SensorGovernor()
     sensor_gov.run()
@@ -35,6 +36,8 @@ def run_ratball_client():
 
 
 def run_ingestor_service():
+    init_logger()
+
     ingestor_srv = IngestorService()
     ingestor_srv.start()
 
