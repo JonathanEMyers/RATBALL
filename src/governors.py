@@ -131,7 +131,6 @@ class SensorGovernor(Process):
                 logger.error(f"Exception occurred while receiving client handshake from Ingestor for sensor{ident}: {exmsg}")
 
 
-
     def _recv_all(self, sock, size) -> bytes:
         """ensures that each packet is complete before transmit"""
         data = b""
@@ -142,10 +141,9 @@ class SensorGovernor(Process):
             data += packet
         return data
 
-    def _pack_sensor_data(self, payload: SensorPacketPayload) -> bytes:
+    def _pack_sensor_data(self, payload) -> bytes:
         """marshals data into predefined binary struct"""
         ordered_payload = [payload.ts, payload.x, payload.y, payload.h, payload.idx]
-        logger.debug(f"Preparing to pack sensor data payload: {ordered_payload}")
         return struct.pack(
             self._cfg.sensor.binfmt,
             *ordered_payload,
@@ -171,6 +169,7 @@ class SensorGovernor(Process):
                             h=data[0].h,
                             idx=idx,
                         )
+                        logger.debug(f"Preparing to pack sensor data payload: {payload}")
                         packet = self._pack_sensor_data(payload)
                         if self._client_ready.is_set():
                             logger.info("Sensor{idx} got client ready signal, beginning data transmission")
