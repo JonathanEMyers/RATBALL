@@ -186,10 +186,9 @@ class IngestorService:
         while True:
             if not self.connection_pool.empty():
                 dev_conn_wrapped = self.connection_pool.get()
-                device_type, ident, created_ts, sock =
-                    itemgetter('device_type', 'ident', 'created_ts', 'sock')(
-                        dev_conn_wrapped['items']
-                    )
+                device_type, ident, created_ts, sock = itemgetter('device_type', 'ident', 'created_ts', 'sock')(
+                    dev_conn_wrapped['items']
+                )
                 dt = time.now()*1000 - created_ts
                 # if the device isn't what we're looking for, reprioritize and re-enqueue it
                 if device_type != 'sensor':
