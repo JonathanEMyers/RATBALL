@@ -2,6 +2,7 @@ import struct
 import socket
 import sys
 from multiprocessing import Process, Queue, Event
+from threading import Thread
 from datetime import datetime
 from loguru import logger
 
@@ -57,10 +58,10 @@ class SensorGovernor(Process):
 
         # initialize sensor threads
         self._thread_pool = [
-            Process(target=self.enqueue, name="_sensor_enq_"),
-            Process(target=self.transmit_live, name="_sensor_tx_"),
+            Thread(target=self.enqueue, name="_sensor_enq_"),
+            Thread(target=self.transmit_live, name="_sensor_tx_"),
             # listen thread runs in background, daemonize to exit when enq/tx threads die
-            Process(target=self.term_listen, name="_sensor_lst_", daemon=True),
+            # Thread(target=self.term_listen, name="_sensor_lst_", daemon=True),
         ]
 
     def _init_sockets(self) -> None:
@@ -133,13 +134,17 @@ class SensorGovernor(Process):
 
     def _recv_all(self, sock, size) -> bytes:
         """ensures that each packet is complete before transmit"""
-        data = b""
-        while len(data) < size:
-            packet = sock.recv(size - len(data))
-            if not packet:
-                return None
-            data += packet
-        return data
+        try:
+            data = b""
+            while len(data) < size:
+                packet = sock.recv(size - len(data))
+                if not packet:
+                    return None
+                data += packet
+            return data
+        except socket.error as ex:
+            exmsg = safe_unwrap_exception(ex)
+            logger.error(f"Socket error occurred while attempting to receive BMI data")
 
     def _pack_sensor_data(self, payload) -> bytes:
         """marshals data into predefined binary struct"""
@@ -213,7 +218,7 @@ class SpeakerGovernor(Process):
 
         self._thread_pool = [
             # listen thread runs in background, daemonize to exit when enq/tx threads die
-            Process(target=self.listen, name="_speaker_listen", daemon=True),
+            Thread(target=self.listen, name="_speaker_listen", daemon=True),
         ]
 
     def _init_socket(self) -> None:
