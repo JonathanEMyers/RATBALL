@@ -17,9 +17,10 @@ def unix_time_millis(dt: float) -> float:
 
 def build_client_hello(device_name: str, device_ident: int) -> bytes:
     try:
-        return struct.pack(">6sId", device_name, device_ident, unix_time_millis(dt.now()))
-    except ex:
-        logger.error(f"Exception occurred while packing client hello packet for device {device_name}{device_ident}: {ex}")
+        return struct.pack(">6sId", device_name.encode("utf-8"), device_ident, unix_time_millis(dt.now()))
+    except struct.error as ex:
+        exmsg = safe_unwrap_exception(ex)
+        logger.error(f"Exception occurred while packing client hello packet for device {device_name}{device_ident}: {exmsg}")
 
 
 def safe_unwrap_exception(ex: Optional[Exception]) -> str:
