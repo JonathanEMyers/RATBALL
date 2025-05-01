@@ -111,8 +111,10 @@ class IngestorService:
                 self._cfg.ingestor.client_hello_binfmt,
                 hello
             )
-        except error:
-            logger.error(f"Failed to unpack client hello payload: {error}")
+        except Exception as ex:
+            if hasattr(ex, 'message'):
+                logger.critical(f"Exception occurred while unpacking payload: {ex.message}")
+            logger.error(f"Failed to unpack client hello payload: {ex}")
             pass
 
     def _accept_new_conn(self):

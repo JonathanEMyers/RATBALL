@@ -141,12 +141,16 @@ class SensorGovernor(Process):
                             continue
                         try:
                             self._sock_ingest.sendall(packet)
-                        except Exception as e:
+                        except Exception as ex:
+                            if hasattr(ex, 'message'):
+                                logger.critical("Exception occurred while sending data: {ex.message}")
                             logger.error(
                                 f"Error sending packet with timestamp `{metadata}`: {e}"
                             )
                     else:
+                        logger.debug("No data, metadata was: {metadata}")
                         logger.warning("No data received from sensor, skipping.")
+                        break
         logger.info("Data transmit thread lifecycle complete, closing socket.")
         self._sock_ingest.close()
 
