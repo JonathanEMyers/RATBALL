@@ -30,7 +30,7 @@ class SensorGovernor(Process):
         except Exception as ex:
             exmsg = safe_unwrap_exception(ex)
             logger.critical(
-                    f"Fatal exception occurred while building sensor manifest for I2C addresses {self._cfg.sensor.i2c_addr}: {exmsg}"
+                f"Fatal exception occurred while building sensor manifest for I2C addresses {self._cfg.sensor.i2c_addr}: {exmsg}"
             )
             self._manifest = []
 
@@ -71,6 +71,10 @@ class SensorGovernor(Process):
             exmsg = safe_unwrap_exception(ex)
             logger.error(f"Exception occurred while connecting to BMI: {exmsg}")
 
+
+    def _is_valid_data_port(self, portno: int):
+        return self._cfg.ingestor.data_port_range_start <= int(portno) < self._cfg.ingestor_data_port_range_end
+
     def _client_handshake(self) -> None:
         for ident, _ in enumerate(self._manifest):
             try:
@@ -82,10 +86,11 @@ class SensorGovernor(Process):
                 logger.error(f"Exception occurred while sending hello packet to Ingestor for device sensor{ident}: {exmsg}")
 
             try:
-                next_port = self._sock_ingest.recv(
+                next_port_payload = self._sock_ingest.recv(
                     struct.calcsize(self._cfg.ingestor.handshake_binfmt)
                 )
-                if self._cfg.ingestor.data_port_range_start <= int(next_port) < self._cfg.ingestor_data_port_range_end:
+                next_port = int.from_bytes(next_port_payload, "big")
+                if self._is_valid_data_port(next_port):
                     logger.info(f"Got client handshake from Ingestor, sending sensor{ident} stream to port {next_port}")
                     self._sock_ingest.close()
                     self._sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
