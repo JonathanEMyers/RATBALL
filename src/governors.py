@@ -104,7 +104,12 @@ class SensorGovernor(Process):
                 next_port_payload = self._sock_ingest.recv(
                     struct.calcsize(self._cfg.ingestor.handshake_binfmt)
                 )
-                next_port = struct.unpack(self._cfg.ingestor.handshake_binfmt, next_port_payload)
+                try:
+                    next_port = struct.unpack(self._cfg.ingestor.handshake_binfmt, next_port_payload)
+                except struct.error as ex:
+                    exmsg = safe_unwrap_exception(ex)
+                    logger.critical(f"Struct error occurred while unpacking Ingestor handshake port: {exmsg}")
+
                 if self._is_valid_data_port(next_port):
                     logger.info(f"Got client handshake from Ingestor, sending sensor{ident} stream to port {next_port}")
                     self._sock_ingest.close()
