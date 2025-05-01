@@ -47,6 +47,10 @@ class DeviceGovernorConnection:
     created_ts: float
     sock: socket.socket
 
+    # implement to make instances subscriptable:
+    def __getitem__(self, item):
+        return getattr(self, item)
+
 
 class IngestorService:
     def __init__(self):
