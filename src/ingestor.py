@@ -228,6 +228,7 @@ class IngestorService:
                 ):
                     datum = self.sensor_data.popleft()
                     nextrow = f"{datum.ts},{datum.x},{datum.y},{datum.h}\n"
+                    logger.debug(f"Emitting row to CSV: {nextrow}")
                     match datum.idx:
                         case 0:
                             s0_outfile.write(nextrow)
