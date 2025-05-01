@@ -58,15 +58,15 @@ class SensorGovernor(Process):
                 (self._cfg.ingestor.ip, self._cfg.ingestor.gateway_port)
             )
             self._sock_ingest.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        except ex:
-            logger.error(f"Exception occurred while connecting to Ingestor: {ex}")
+        except:
+            logger.error(f"Exception occurred while connecting to Ingestor")
 
         # bmi tx/rx
         try:
             self._sock_bmi.connect((self._cfg.bmi.ip, self._cfg.bmi.listen_port))
             self._sock_bmi.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        except ex:
-            logger.error(f"Exception occurred while connecting to BMI: {ex}")
+        except:
+            logger.error(f"Exception occurred while connecting to BMI")
 
     def _client_handshake(self) -> None:
         for ident, _ in enumerate(self._manifest):

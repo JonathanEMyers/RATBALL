@@ -1,6 +1,6 @@
 ingestor:
   ip: 127.0.0.1
-  gateway_port: 8888
+  gateway_port: 9595
   data_port_range_start: 30000
   data_port_range_end: 42000
   client_hello_binfmt: '>sId'
