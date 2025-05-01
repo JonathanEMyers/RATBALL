@@ -205,7 +205,7 @@ class IngestorService:
                 # if the device isn't what we're looking for, reprioritize and re-enqueue it
                 if device_type != 'sensor':
                     self.connection_pool.put(
-                        PrioritizedGvnrConn(
+                        (
                             # prioritize according to delta w/ incoming connection timestamp
                             int(dt),
                             DeviceGovernorConnection(
