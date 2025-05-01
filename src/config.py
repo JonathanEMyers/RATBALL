@@ -21,7 +21,8 @@ class IngestorConfig:
     gateway_port: int
     data_port_range_start: int
     data_port_range_end: int
-
+    client_hello_binfmt: str
+    handshake_binfmt: str
 
 @dataclass(frozen=True, slots=True)
 class BMIConfig:
@@ -56,6 +57,7 @@ class SpeakerConfig:
 @dataclass(frozen=True, slots=True)
 class SensorConfig:
     i2c_addr: tuple[int, int]
+    binfmt: str
 
 
 @dataclass(frozen=True, slots=True)

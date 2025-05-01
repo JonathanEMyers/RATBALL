@@ -1,4 +1,5 @@
 from __future__ import annotations
+from operator import itemgetter
 
 import socket
 import struct
@@ -6,6 +7,8 @@ import sys
 
 from loguru import logger
 from queue import PriorityQueue
+from collections import deque
+from typing import Deque
 from dataclasses import dataclass
 from threading import Thread, Event
 from .config import RatballConfig
@@ -28,8 +31,8 @@ from .config import RatballConfig
 #
 # Device sockets are placed into a priority queue and handled round-robin according to timestamp.
 
-client_hello_binfmt = ">6sid"
-client_hello_len = struct.calcsize(client_hello_binfmt)
+#client_hello_binfmt = ">6sId"
+#client_hello_len = struct.calcsize(client_hello_binfmt)
 
 server_handshake_binfmt = ">H"
 server_handshake_len = struct.calcsize(server_handshake_binfmt)
@@ -40,7 +43,7 @@ class DeviceGovernorConnection:
     device_type: str
     ident: int
     created_ts: float
-    socket: socket.socket
+    sock: socket.socket
 
 @dataclass(order=True)
 class PrioritizedGvnrConn:
@@ -52,21 +55,24 @@ class IngestorService:
         super().__init__()
         self._cfg = RatballConfig()
 
-        self._gateway_sock = None
-        self._next_device_port = self._cfg.ingestor.data_port_range_start
+        self._gateway_sock: socket.socket = None
+        self._next_device_port: int = self._cfg.ingestor.data_port_range_start
         self._init_gateway_socket()
 
         # priority queue of inbound device connections
-        self.connection_pqueue = PriorityQueue()
+        self.connection_pool = PriorityQueue()
 
         self._rx_complete = Event()
         self._term_flag = Event()
 
+        # begin with one listener thread; thread pool will grow with # of clients
         self._thread_pool = [
             Thread(target=self.queue_inbound_clients, name="_lst_client_"),
-            Thread(target=self.consume_camera_feed, name="_rx_camera_"),
-            Thread(target=self.consume_sensor_feed, name="_rx_sensor_"),
+#            Thread(target=self.consume_camera_feed, name="_rx_camera_"),
+#            Thread(target=self.consume_sensor_feed, name="_rx_sensor_"),
         ]
+        self.sensor_data: Deque[SensorPacketPayload] = deque()
+
 
     def _init_gateway_socket(self):
         """Initialize the gateway socket and begin listening for client connections"""
@@ -75,6 +81,7 @@ class IngestorService:
             '0.0.0.0',
             self._cfg.ingestor.gateway_port,
         ))
+        self._current_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._current_sock.listen()
 
     def _get_next_device_port(self):
@@ -84,6 +91,9 @@ class IngestorService:
         return port
 
     def _recv_client_hello(self, conn: socket.socket) -> bytes:
+        client_hello_len = struct.calcsize(
+            self._cfg.ingestor.client_hello_binfmt
+        )
         try:
             hello = b""
             while len(hello) < client_hello_len:
@@ -92,12 +102,15 @@ class IngestorService:
                     return None
                 hello += payload
             return hello
-        except ex:
-            logger.error(f"Exception occurred while accepting new connection: {ex}")
+        except:
+            logger.error(f"Exception occurred while accepting new connection")
 
     def _unpack_client_hello(self, hello: bytes) -> Tuple[str, int, float]:
         try:
-            return struct.unpack(hello)
+            return struct.unpack(
+                self._cfg.ingestor.client_hello_binfmt,
+                hello
+            )
         except error:
             logger.error(f"Failed to unpack client hello payload: {error}")
             pass
@@ -129,6 +142,14 @@ class IngestorService:
                     )
                 )
             )
+            if device == 'sensor':
+                t = Thread(target=self.consume_sensor_feed, name=f"_rx_sensor_{len(self._thread_pool)}_", daemon=True),
+                self._thread_pool.append(t)
+                t.start()
+            if device == 'camera':
+                t = Thread(target=self.consume_camera_feed, name=f"_rx_camera_{len(self._thread_pool)}_", daemon=True),
+                self._thread_pool.append(t)
+                t.start()
 
             # send handshake w/ permanent port to the client to use for all further transactions
             conn.send(
@@ -147,7 +168,51 @@ class IngestorService:
     def consume_camera_feed(self):
         pass
 
+    def _recv_sensor_data(self, conn):
+        data_pkt_size = struct.calcsize(self._cfg.sensor.binfmt)
+
+        # keep receiving data for the lifetime of the thread
+        while True:
+            sensor_data_bin = sock.recv(data_pkt_size)
+            ts, x, y, h, idx = struct.unpack(
+                self._cfg.sensor.binfmt,
+                sensor_data_bin,
+            )
+            payload = SensorPacketPayload(ts, x, y, h, idx)
+            self.sensor_data.append(payload)
+
+
     def consume_sensor_feed(self):
+        while True:
+            if not self.connection_pool.empty():
+                dev_conn_wrapped = self.connection_pool.get()
+                device_type, ident, created_ts, sock =
+                    itemgetter('device_type', 'ident', 'created_ts', 'sock')(
+                        dev_conn_wrapped['items']
+                    )
+                dt = time.now()*1000 - created_ts
+                # if the device isn't what we're looking for, reprioritize and re-enqueue it
+                if device_type != 'sensor':
+                    self.connection_pool.put(
+                        PrioritizedGvnrConn(
+                            # prioritize according to delta w/ incoming connection timestamp
+                            int(dt),
+                            DeviceGovernorConnection(
+                                device,
+                                ident,
+                                ts,
+                                assigned_socket,
+                            )
+                        )
+                    )
+
+                # if it is, accept connection on socket and begin reading to CSV
+                else:
+                    conn, addr = sock.accept()
+                    self._recv_sensor_data(conn)
+
+
+
         pass
 
     def start(self):

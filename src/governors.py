@@ -9,6 +9,8 @@ from .config import RatballConfig
 from .sensor import Sensor
 from .speaker import Speaker
 from .camera import Camera
+from .dataclasses import SensorPacketPayload
+
 from .utils import unix_time_millis, build_client_hello
 
 
@@ -18,6 +20,7 @@ class SensorGovernor(Process):
         super().__init__()
         self._cfg = RatballConfig()
         # start thread events
+        self._client_ready = Event()
         self._tx_complete = Event()
         self._term_flag = Event()
 
@@ -75,20 +78,23 @@ class SensorGovernor(Process):
                 logger.error(f"Exception occurred while sending hello packet to Ingestor for device sensor{ident}: {ex}")
 
             try:
-                next_port = self._sock_ingest.recv(2)
-                if 30_000 < int(next_port) < 65_536:
+                next_port = self._sock_ingest.recv(
+                    struct.calcsize(self._cfg.ingestor.handshake_binfmt)
+                )
+                if self._cfg.ingestor.data_port_range_start <= int(next_port) < self._cfg.ingestor_data_port_range_end:
                     logger.info(f"Got client handshake from Ingestor, sending sensor{ident} stream to port {next_port}")
                     self._sock_ingest.close()
                     self._sock_ingest = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     self._sock_ingest.connect(
                         (self._cfg.ingestor.ip, next_port)
                     )
+                    self._client_ready.set()
                 else:
                     logger.critical(f"Ingestor responded with client handshake value outside of expected range: {next_port}")
                     self._sock_ingest.close()
                     raise Exception("Ingestor stream connection could not be established, aborting")
-            except ex:
-                logger.error(f"Exception occurred while receiving client handshake from Ingestor for sensor{ident}: {ex}")
+            except:
+                logger.error(f"Exception occurred while receiving client handshake from Ingestor for sensor{ident}")
 
 
     def _recv_all(self, sock, size) -> bytes:
@@ -101,15 +107,12 @@ class SensorGovernor(Process):
             data += packet
         return data
 
-    def _pack_sensor_data(self, metadata: float, motion_data, sensor_idx: int) -> bytes:
+    def _pack_sensor_data(self, payload: SensorPacketPayload) -> bytes:
         """marshals data into predefined binary struct"""
+        ordered_payload = [payload.ts, payload.x, payload.y, payload.h, payload.idx]
         return struct.pack(
-            ">4dI",
-            metadata,
-            motion_data[0].x,
-            motion_data[0].y,
-            motion_data[0].h,
-            sensor_idx,
+            self._cfg.sensor.binfmt,
+            *ordered_payload,
         )
 
     def enqueue(self) -> None:
@@ -125,7 +128,17 @@ class SensorGovernor(Process):
                 for idx, sensor in enumerate(self._manifest):
                     metadata, data = sensor.get_next()
                     if data is not None:
-                        packet = self._pack_motion_data(metadata, data, idx)
+                        payload = SensorPacketPayload(
+                            ts=metadata,
+                            x=data[0].x,
+                            y=data[0].y,
+                            h=data[0].h,
+                            idx=idx,
+                        )
+                        packet = self._pack_sensor_data(payload)
+                        if not self._client_ready.is_set():
+                            logger.info("Sensor{idx} waiting for client ready signal")
+                            continue
                         try:
                             self._sock_ingest.sendall(packet)
                         except Exception as e:
@@ -133,14 +146,8 @@ class SensorGovernor(Process):
                                 f"Error sending packet with timestamp `{metadata}`: {e}"
                             )
                     else:
-                        logger.info("No data left, sending stop signal.")
-                        try:
-                            self._sock_ingest.sendall(b"END_STOP")
-                            self._tx_complete.set()
-                        except Exception as e:
-                            logger.error(f"Error sending stop signal: {e}")
-                        break
-        logger.debug("data transmit thread lifecycle complete, closing socket")
+                        logger.warn("No data received from sensor, skipping.")
+        logger.info("Data transmit thread lifecycle complete, closing socket.")
         self._sock_ingest.close()
 
     def term_listen(self):
