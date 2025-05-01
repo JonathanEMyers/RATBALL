@@ -5,7 +5,9 @@ import socket
 import struct
 import sys
 import time
+import os
 
+from datetime import datetime
 from loguru import logger
 from queue import PriorityQueue
 from collections import deque
@@ -67,6 +69,12 @@ class IngestorService:
         self._rx_complete = Event()
         self._term_flag = Event()
 
+        self._data_dir = os.path.join(
+            self._cfg.data_paths.sensor,
+            datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+        )
+        self._init_data_dirs()
+
         # begin with one listener thread; thread pool will grow with # of clients
         self._thread_pool = [
             Thread(target=self.queue_inbound_clients, name="_lst_client_"),
@@ -75,6 +83,9 @@ class IngestorService:
         ]
         self.sensor_data: Deque = deque()
 
+    def _init_data_dirs(self):
+        logger.info(f"Creating sensor data directory at {self._data_dir}")
+        os.makedirs(self._data_dir, exist_ok=True)
 
     def _init_gateway_socket(self):
         """Initialize the gateway socket and begin listening for client connections"""
@@ -207,6 +218,22 @@ class IngestorService:
                 exmsg = safe_unwrap_exception(ex)
                 logger.error(f"Struct error occurred while deserializing sensor data packet: {exmsg}")
 
+    def _write_sensor_data(self):
+        # write data from queue for the lifetime of the thread
+        while True:
+            if len(self.sensor_data) > 0:
+                with (
+                    open(os.path.join(self._data_dir, 'sensor0.csv'), 'w+') as s1_outfile,
+                    open(os.path.join(self._data_dir, 'sensor1.csv'), 'w+') as s2_outfile,
+                ):
+                    datum = self.sensor_data.popleft()
+                    nextrow = f"{datum.ts},{datum.x},{datum.y},{datum.h}\n"
+                    match datum.idx:
+                        case 0:
+                            s0_outfile.write(nextrow)
+                        case 1:
+                            s1_outfile.write(nextrow)
+
 
     def consume_sensor_feed(self):
         while True:
@@ -238,9 +265,10 @@ class IngestorService:
 
                 # if it is, accept connection on socket and begin reading to CSV
                 else:
-                    logger.info(f"Spawning thread to begin consuming data stream from {device_type}{ident}")
+                    logger.info(f"Spawning thread to begin writing data stream from {device_type}{ident}")
                     conn, addr = sock.accept()
-                    t = Thread(target=self._recv_sensor_data, name=f"_recv_sensor_{len(self._thread_pool)}_", args=[conn], daemon=True)
+                    #t = Thread(target=self._recv_sensor_data, name=f"_recv_sensor_{len(self._thread_pool)}_", args=[conn], daemon=True)
+                    t = Thread(target=self._write_sensor_data, name=f"_write_sensor_{len(self._thread_pool)}_", daemon=True)
                     self._thread_pool.append(t)
                     t.start()
 
