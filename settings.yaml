@@ -3,8 +3,8 @@ ingestor:
   gateway_port: 8888
   data_port_range_start: 30000
   data_port_range_end: 42000
-  client_hello_binfmt: >sId
-  handshake_binfmt: >H
+  client_hello_binfmt: '>sId'
+  handshake_binfmt: '>H'
 bmi:
   ip: 127.0.0.1
   gateway_port: 8888
@@ -27,7 +27,7 @@ sensor:
   i2c_addr:
     - 0x17
     - 0x67
-  binfmt: >4dI
+  binfmt: '>4dI'
 camera:
   ident:
     - 0
