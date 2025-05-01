@@ -221,7 +221,7 @@ class IngestorService:
     def _write_sensor_data(self):
         # write data from queue for the lifetime of the thread
         while True:
-            logger.debug("In write thread; data buffer length is {len(self.sensor_data)}")
+            logger.debug(f"In write thread; data buffer length is {len(self.sensor_data)}")
             if len(self.sensor_data) > 0:
                 with (
                     open(os.path.join(self._data_dir, 'sensor0.csv'), 'w+') as s1_outfile,
