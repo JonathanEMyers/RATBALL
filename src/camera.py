@@ -93,7 +93,7 @@ class Camera:
         "height",
         "fps",
         "output_dir",
-        "frame_ival_multiplier",
+        "pipeline_str",
         "_outpath",
         "_capture_is_static",
         "_buffer",
@@ -111,7 +111,7 @@ class Camera:
         framerate: int = 30,
         buffer_seconds: int = 10,
         output_dir: Optional[str] = None,
-        frame_ival_multiplier = 2,
+        pipeline_str: Optional[str] = None,
     ) -> None:
         self.sensor_id = sensor_id
         self.capture_id = capture_id
@@ -119,7 +119,7 @@ class Camera:
         self.height = height
         self.fps = framerate
         self.output_dir = output_dir
-        self.frame_ival_multiplier = frame_ival_multiplier
+        self.pipeline_str = pipeline_str
 
         self._outpath = (
             f"{output_dir}/{capture_id}_cam{sensor_id}" if output_dir is not None else None
@@ -131,17 +131,24 @@ class Camera:
         capacity = framerate * buffer_seconds
         self._buffer: DoubleBuffer[FrameRecord] = DoubleBuffer(capacity)
 
-        # if `output_dir` is provided, write frames at that location and tee to cv2
-        self._cap = (
-            cv2.VideoCapture(
-                gstreamer_dyn_pipeline(sensor_id, width, height, framerate),
+        self._cap = None
+        # use an externally supplied gstreamer pipeline command, if present
+        if self.pipeline_str is not None:
+            self._cap = cv2.VideoCapture(
+                self.pipeline_str,
                 cv2.CAP_GSTREAMER,
             )
-            if self._outpath is None
-            else cv2.VideoCapture(
+        # if `output_dir` is provided, write frames at that location and tee to cv2
+        elif self._outpath is not None:
+            self._cap = cv2.VideoCapture(
                 gstreamer_static_pipeline_mkv(
                     sensor_id, width, height, framerate, self._outpath
                 ),
+                cv2.CAP_GSTREAMER,
+            )
+        else:
+            cv2.VideoCapture(
+                gstreamer_dyn_pipeline(sensor_id, width, height, framerate),
                 cv2.CAP_GSTREAMER,
             )
         )
