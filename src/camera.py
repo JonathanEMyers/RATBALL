@@ -147,11 +147,10 @@ class Camera:
                 cv2.CAP_GSTREAMER,
             )
         else:
-            cv2.VideoCapture(
+            self._cap = cv2.VideoCapture(
                 gstreamer_dyn_pipeline(sensor_id, width, height, framerate),
                 cv2.CAP_GSTREAMER,
             )
-        )
 
         if not self._cap.isOpened():
             raise RuntimeError(f"Camera {sensor_id} failed to open")
