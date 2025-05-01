@@ -95,7 +95,7 @@ class IngestorService:
             self._cfg.ingestor.client_hello_binfmt
         )
         try:
-            payload = conn.recv(client_hello_len - len(hello))
+            payload = conn.recv(client_hello_len)
             if not payload:
                 raise Exception("Got empty payload for client hello packet")
             return payload
