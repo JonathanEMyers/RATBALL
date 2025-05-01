@@ -97,7 +97,7 @@ class IngestorService:
         try:
             hello = b""
             while len(hello) < client_hello_len:
-                payload = self._gateway_sock.recv(client_hello_len - len(hello))
+                payload = conn.recv(client_hello_len - len(hello))
                 if not payload:
                     return None
                 hello += payload
