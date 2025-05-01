@@ -168,11 +168,11 @@ class SensorGovernor(Process):
                     metadata, data = sensor.get_next()
                     if data is not None:
                         payload = SensorPacketPayload(
-                            ts=metadata,
-                            x=data[0].x,
-                            y=data[0].y,
-                            h=data[0].h,
-                            idx=idx,
+                            metadata,
+                            data[0].x,
+                            data[0].y,
+                            data[0].h,
+                            idx,
                         )
                         logger.debug(f"Preparing to pack sensor data payload: {payload}")
                         packet = self._pack_sensor_data(payload)
