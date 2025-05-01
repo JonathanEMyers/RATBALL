@@ -165,21 +165,19 @@ class SensorGovernor(Process):
                             idx=idx,
                         )
                         packet = self._pack_sensor_data(payload)
-                        if not self._client_ready.is_set():
-                            logger.info("Sensor{idx} waiting for client ready signal")
-                            continue
-                        try:
-                            self._sock_ingest.sendall(packet)
-                        except socket.error as ex:
-                            exmsg = safe_unwrap_exception(ex)
-                            logger.critical(
-                                f"Error sending packet with timestamp `{metadata}`: {exmsg}"
-                            )
+                        if self._client_ready.is_set():
+                            logger.info("Sensor{idx} got client ready signal, beginning data transmission")
+                            try:
+                                self._sock_ingest.sendall(packet)
+                            except socket.error as ex:
+                                exmsg = safe_unwrap_exception(ex)
+                                logger.error(
+                                    f"Socket error occurred while sending data packet for sensor{idx}: {exmsg}"
+                                )
                     else:
-                        logger.debug(f"No data, metadata was: {metadata}")
-                        logger.warning("No data received from sensor, skipping.")
+                        logger.debug("No data received from sensor, skipping.")
                         break
-        logger.info("Data transmit thread lifecycle complete, closing socket.")
+        logger.info(f"Sensor data transmit thread lifecycle has completed, closing socket.")
         self._sock_ingest.close()
 
     def term_listen(self):

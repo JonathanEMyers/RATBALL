@@ -126,8 +126,9 @@ class IngestorService:
 
         hello = self._recv_client_hello(conn)
         if hello is not None:
-            device, ident, ts = self._unpack_client_hello(hello)
-            logger.info(f"Got client hello with device={device}, ident={ident}, ts={ts}")
+            device_enc, ident, ts = self._unpack_client_hello(hello)
+            device = device_enc.decode("ascii")
+            logger.info(f"Got client hello from device {device}{ident}, ts={ts}")
             dt = time.time()*1000 - ts
 
             # create and bind a new socket at a precomputed port
