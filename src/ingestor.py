@@ -124,6 +124,7 @@ class IngestorService:
         hello = self._recv_client_hello(conn)
         if hello is not None:
             device, ident, ts = hello
+            logger.info(f"Got client hello with device={device}, ident={ident}, ts={ts}")
             dt = time.now()*1000 - ts
 
             # create and bind a new socket at a precomputed port
@@ -145,10 +146,12 @@ class IngestorService:
                 )
             )
             if device == 'sensor':
+                logger.info(f"Adding new thread to thread pool for sensor{ident}, ts={ts}")
                 t = Thread(target=self.consume_sensor_feed, name=f"_rx_sensor_{len(self._thread_pool)}_", daemon=True),
                 self._thread_pool.append(t)
                 t.start()
             if device == 'camera':
+                logger.info(f"Adding new thread to thread pool for camera{ident}, ts={ts}")
                 t = Thread(target=self.consume_camera_feed, name=f"_rx_camera_{len(self._thread_pool)}_", daemon=True),
                 self._thread_pool.append(t)
                 t.start()
