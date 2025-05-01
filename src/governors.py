@@ -145,6 +145,7 @@ class SensorGovernor(Process):
     def _pack_sensor_data(self, payload: SensorPacketPayload) -> bytes:
         """marshals data into predefined binary struct"""
         ordered_payload = [payload.ts, payload.x, payload.y, payload.h, payload.idx]
+        logger.debug(f"Preparing to pack sensor data payload: {ordered_payload}")
         return struct.pack(
             self._cfg.sensor.binfmt,
             *ordered_payload,
