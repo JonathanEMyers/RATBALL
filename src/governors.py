@@ -148,7 +148,7 @@ class SensorGovernor(Process):
                                 f"Error sending packet with timestamp `{metadata}`: {e}"
                             )
                     else:
-                        logger.debug("No data, metadata was: {metadata}")
+                        logger.debug(f"No data, metadata was: {metadata}")
                         logger.warning("No data received from sensor, skipping.")
                         break
         logger.info("Data transmit thread lifecycle complete, closing socket.")
