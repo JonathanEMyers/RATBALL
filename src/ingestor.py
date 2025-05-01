@@ -47,10 +47,6 @@ class DeviceGovernorConnection:
     created_ts: float
     sock: socket.socket
 
-@dataclass(order=True)
-class PrioritizedGvnrConn:
-    priority: int
-    item: DeviceGovernorConnection(compare=False)
 
 class IngestorService:
     def __init__(self):
@@ -138,7 +134,7 @@ class IngestorService:
 
             # place the device descriptor + assigned socket into queue
             self.connection_pool.put(
-                PrioritizedGvnrConn(
+                (
                     # prioritize according to delta w/ incoming connection timestamp
                     int(dt),
                     DeviceGovernorConnection(
@@ -149,6 +145,7 @@ class IngestorService:
                     )
                 )
             )
+
             if device == 'sensor':
                 logger.info(f"Adding new thread to thread pool for sensor{ident}, ts={ts}")
                 t = Thread(target=self.consume_sensor_feed, name=f"_rx_sensor_{len(self._thread_pool)}_", daemon=True)
