@@ -76,13 +76,13 @@ class IngestorService:
 
     def _init_gateway_socket(self):
         """Initialize the gateway socket and begin listening for client connections"""
-        self._current_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._current_sock.bind((
+        self._gateway_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._gateway_sock.bind((
             '',
             self._cfg.ingestor.gateway_port,
         ))
-        self._current_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._current_sock.listen()
+        self._gateway_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._gateway_sock.listen()
 
     def _get_next_device_port(self):
         """Return the next available data port number, then increment it"""
@@ -118,7 +118,7 @@ class IngestorService:
 
     def _accept_new_conn(self):
         """Accept device connection, assign that device a socket in a priority queue, then send handshake to client"""
-        conn, addr = self._current_sock.accept()
+        conn, addr = self._gateway_sock.accept()
         logger.info(f"Connection from: {addr}")
 
         hello = self._recv_client_hello(conn)
