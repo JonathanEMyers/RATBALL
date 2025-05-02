@@ -189,49 +189,47 @@ class IngestorService:
     def consume_camera_feed(self):
         pass
 
-    def _recv_sensor_data(self, conn):
+    def _recv_sensor_data(self, sock):
         data_pkt_size = struct.calcsize(self._cfg.sensor.binfmt)
-        # keep receiving data for the lifetime of the thread
-        while True:
-            sensor_data_bin = b""
-            try:
-                while len(sensor_data_bin) < data_pkt_size:
-                    packet = conn.recv(data_pkt_size - len(sensor_data_bin))
-                    if not packet:
-                        break
-                    sensor_data_bin += packet
-            except socket.error as ex:
-                exmsg = safe_unwrap_exception(ex)
-                logger.error(f"Socket error occurred while receiving sensor data: {exmsg}")
+        conn, addr = sock.accept()
+        sensor_data_bin = b""
+        try:
+            while len(sensor_data_bin) < data_pkt_size:
+                packet = conn.recv(data_pkt_size - len(sensor_data_bin))
+                if not packet:
+                    break
+                sensor_data_bin += packet
+        except socket.error as ex:
+            exmsg = safe_unwrap_exception(ex)
+            logger.error(f"Socket error occurred while receiving sensor data: {exmsg}")
 
-            logger.debug(f"Received {len(sensor_data_bin)} byte sensor data packet")
-            try:
-                ts, x, y, h, idx = struct.unpack(
-                    self._cfg.sensor.binfmt,
-                    sensor_data_bin,
-                )
-                payload = SensorPacketPayload(ts, x, y, h, idx)
-                self.sensor_data.append(payload)
-            except struct.error as ex:
-                exmsg = safe_unwrap_exception(ex)
-                logger.error(f"Struct error occurred while deserializing sensor data packet: {exmsg}")
+        logger.debug(f"Received {len(sensor_data_bin)} byte sensor data packet")
+        try:
+            ts, x, y, h, idx = struct.unpack(
+                self._cfg.sensor.binfmt,
+                sensor_data_bin,
+            )
+            payload = SensorPacketPayload(ts, x, y, h, idx)
+            self.sensor_data.append(payload)
+        except struct.error as ex:
+            exmsg = safe_unwrap_exception(ex)
+            logger.error(f"Struct error occurred while deserializing sensor data packet: {exmsg}")
 
     def _write_sensor_data(self):
         # write data from queue for the lifetime of the thread
-        while True:
-            if len(self.sensor_data) > 0:
-                with (
-                    open(os.path.join(self._data_dir, 'sensor0.csv'), 'w+') as s1_outfile,
-                    open(os.path.join(self._data_dir, 'sensor1.csv'), 'w+') as s2_outfile,
-                ):
-                    datum = self.sensor_data.popleft()
-                    nextrow = f"{datum.ts},{datum.x},{datum.y},{datum.h}\n"
-                    logger.debug(f"Emitting row to CSV: {nextrow}")
-                    match datum.idx:
-                        case 0:
-                            s0_outfile.write(nextrow)
-                        case 1:
-                            s1_outfile.write(nextrow)
+        if len(self.sensor_data) > 0:
+            with (
+                open(os.path.join(self._data_dir, 'sensor0.csv'), 'w+') as s1_outfile,
+                open(os.path.join(self._data_dir, 'sensor1.csv'), 'w+') as s2_outfile,
+            ):
+                datum = self.sensor_data.popleft()
+                nextrow = f"{datum.ts},{datum.x},{datum.y},{datum.h}\n"
+                logger.debug(f"Emitting row to CSV: {nextrow}")
+                match datum.idx:
+                    case 0:
+                        s0_outfile.write(nextrow)
+                    case 1:
+                        s1_outfile.write(nextrow)
 
     def consume_sensor_feed(self):
         while True:
@@ -264,8 +262,7 @@ class IngestorService:
                 # if it is, accept connection on socket and begin reading to CSV
                 else:
                     logger.info(f"Spawning thread to begin writing data stream from {device_type}{ident}")
-                    conn, addr = sock.accept()
-                    recv_t = Thread(target=self._recv_sensor_data, name=f"_recv_sensor_{len(self._thread_pool)}_", args=[conn], daemon=True)
+                    recv_t = Thread(target=self._recv_sensor_data, name=f"_recv_sensor_{len(self._thread_pool)}_", args=[sock], daemon=True)
                     write_t = Thread(target=self._write_sensor_data, name=f"_write_sensor_{len(self._thread_pool)}_", daemon=True)
                     self._thread_pool.extend([recv_t, write_t])
                     recv_t.start()
